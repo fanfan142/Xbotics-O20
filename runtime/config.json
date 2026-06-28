@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "o20": {
+    "side": "left",
+    "backend": "mock",
+    "canfd_device": 0,
+    "sdk_root": "../linkerhand-o20-ros2",
+    "start_monitoring": true,
+    "calibrate_on_connect": false,
+    "default_speed": 60
+  },
+  "safety": {
+    "clamp_positions": true,
+    "max_step_per_frame": 45.0,
+    "min_frame_dt_s": 0.04,
+    "puppet_safe_mode": true,
+    "current_protection_enabled": true,
+    "max_current_ma": 1200.0,
+    "temperature_protection_enabled": true,
+    "max_temperature_c": 58.0,
+    "stop_on_read_error": true,
+    "return_home_on_stop": true,
+    "return_home_speed": 35
+  },
+  "action_library": {
+    "path": "runtime/action_library/actions.json"
+  },
+  "ui": {
+    "window_title": "Xbotics O20 控制台",
+    "window_width": 1440,
+    "window_height": 900,
+    "show_positions": true,
+    "show_public20": true,
+    "show_current": true,
+    "show_temperature": true,
+    "show_fault": true
+  },
+  "camera": {
+    "camera_index": 0,
+    "mirror": false,
+    "detection_fps": 30.0
+  }
+}

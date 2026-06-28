@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xbotics-o20"
+version = "0.1.0"
+description = "Xbotics O20 control helpers for Ubuntu and ROS 2"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PySide6>=6.6", "opencv-python>=4.12.0", "mediapipe>=0.10.33"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+xbotics-o20 = "xbotics_o20.cli:main"
+xbotics-o20-console = "xbotics_o20.desktop_console:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.data-files]
+"share/xbotics_o20/assets" = ["assets/hand_landmarker.task"]
+"share/xbotics_o20/runtime" = ["runtime/config.json"]
+"share/xbotics_o20/runtime/action_library" = ["runtime/action_library/actions.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

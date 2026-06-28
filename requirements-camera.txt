@@ -1,0 +1,3 @@
+# 兼容旧分发说明的摄像头依赖清单；OpenCV/MediaPipe 已进入 requirements.txt 主依赖。
+opencv-python>=4.12.0
+mediapipe>=0.10.33

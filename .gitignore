@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Runtime files generated on the local machine
+runtime/logs/
+runtime/diagnostics/
+runtime/locks/
+runtime/native_libs/
+runtime/verification/
+runtime/**/*.invalid-*
+
+# Local IDE/tooling state
+.idea/
+.vscode/
+.serena/
