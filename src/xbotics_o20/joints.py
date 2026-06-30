@@ -62,7 +62,7 @@ PUBLIC_POSITION_NAMES: tuple[str, ...] = (
     "小指末端",
 )
 
-# 官方 ROS2 节点里的 position -> motor 重排表，别瞎改。
+# ROS2 position -> motor 重排表，别瞎改。
 POSITION_TO_MOTOR_MAP: tuple[int, ...] = (
     0,
     15,

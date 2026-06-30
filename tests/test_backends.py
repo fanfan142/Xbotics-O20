@@ -83,13 +83,63 @@ def test_direct_backend_disconnects_controller_on_failed_connect(monkeypatch) ->
         "ensure_canfd_native_libraries",
         lambda _sdk_root: NativeLibraryStatus(Path("libcanbus.so"), Path("libusb-1.0.so"), "test"),
     )
-    monkeypatch.setattr(backends, "_load_official_controller", lambda _sdk_root: FailingConnectController)
+    monkeypatch.setattr(backends, "_load_ros2_canfd_controller", lambda _sdk_root: FailingConnectController)
 
     backend = DirectO20Backend()
 
     assert backend.connect() is False
     assert FailingConnectController.last_instance is not None
     assert FailingConnectController.last_instance.disconnected is True
+    assert lock.released is True
+
+
+def test_direct_backend_uses_native_controller_for_hcanbus(monkeypatch) -> None:
+    class FakeLock:
+        released = False
+
+        def acquire(self) -> bool:
+            return True
+
+        def release(self) -> None:
+            self.released = True
+
+    class FakeNativeController:
+        last_instance = None
+
+        def __init__(self, *, hand_type: str, canfd_device: int, sdk_root=None) -> None:
+            self.hand_type = hand_type
+            self.canfd_device = canfd_device
+            self.sdk_root = sdk_root
+            self.started = False
+            FakeNativeController.last_instance = self
+
+        def connect(self):
+            return True, "左手"
+
+        def start_monitoring(self) -> None:
+            self.started = True
+
+        def disconnect(self) -> None:
+            return None
+
+    lock = FakeLock()
+    monkeypatch.setattr(backends, "CanfdProcessLock", lambda _device: lock)
+    monkeypatch.setattr(backends, "_canfd_usb_permission_error", lambda: "")
+    monkeypatch.setattr(
+        backends,
+        "ensure_canfd_native_libraries",
+        lambda _sdk_root: NativeLibraryStatus(Path("HCanbus.dll"), None, "test", driver="hcanbus"),
+    )
+    monkeypatch.setattr(backends, "NativeO20Controller", FakeNativeController)
+    monkeypatch.setattr(backends, "_load_ros2_canfd_controller", lambda _sdk_root: (_ for _ in ()).throw(RuntimeError("should not load controller")))
+
+    backend = DirectO20Backend(side="left")
+
+    assert backend.connect() is True
+    assert FakeNativeController.last_instance is not None
+    assert FakeNativeController.last_instance.started is True
+    assert backend.side == "left"
+    backend.disconnect()
     assert lock.released is True
 
 

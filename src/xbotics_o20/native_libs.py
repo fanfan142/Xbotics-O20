@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import platform
 import tarfile
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .config import PROJECT_ROOT, WORKSPACE_ROOT, resolve_project_path
+from .config import PROJECT_ROOT, WORKSPACE_ROOT, resolve_project_path, resolve_resource_path
 
 
 @dataclass(frozen=True)
@@ -15,10 +16,17 @@ class NativeLibraryStatus:
     libusb: Path | None
     source: str
     message: str = ""
+    driver: str = "libcanbus"
 
     @property
     def ready(self) -> bool:
+        if self.driver == "hcanbus":
+            return self.libcanbus is not None
         return self.libcanbus is not None and self.libusb is not None
+
+    @property
+    def uses_hcanbus(self) -> bool:
+        return self.driver == "hcanbus"
 
 
 def _sdk_roots(sdk_root: str | Path | None = None) -> list[Path]:
@@ -64,19 +72,25 @@ def _candidate_archives(sdk_root: str | Path | None = None) -> list[Path]:
 
 
 def _candidate_windows_dlls(sdk_root: str | Path | None = None) -> list[Path]:
-    roots = _sdk_roots(sdk_root)
-    roots.extend(
-        [
-            WORKSPACE_ROOT / "code" / "O20_hand_ui_canfd_release_2026_04_27",
-            WORKSPACE_ROOT / "action_generate_yx" / "demo" / "O20_hand_ui_canfd_release_2026_04_27",
-        ]
-    )
     dlls: list[Path] = []
+    for env_name in ("O20_CANFD_DLL", "HCANBUS_DLL"):
+        value = os.environ.get(env_name, "").strip()
+        if value:
+            path = resolve_project_path(value)
+            if path.exists():
+                dlls.append(path)
+    roots: list[Path] = []
+    if sdk_root:
+        root = resolve_project_path(sdk_root)
+        roots.append(root.parent if root.name == "_internal" else root)
     for root in roots:
         for relative in ("HCanbus.dll", "_internal/HCanbus.dll"):
             path = root / relative
             if path.exists():
                 dlls.append(path)
+    bundled = resolve_resource_path("resources/canfd/win-x64/HCanbus.dll")
+    if bundled.exists():
+        dlls.append(bundled)
     return dlls
 
 
@@ -104,20 +118,18 @@ def ensure_canfd_native_libraries(sdk_root: str | Path | None = None) -> NativeL
         dlls = _candidate_windows_dlls(sdk_root)
         if dlls:
             return NativeLibraryStatus(
-                libcanbus=None,
+                libcanbus=dlls[0],
                 libusb=None,
                 source=str(dlls[0]),
-                message=(
-                    f"检测到官方 Windows CANFD 动态库 {dlls[0]}，"
-                    "但当前直连后端仍使用 ROS2 SDK 的 Linux libcanbus.so/libusb-1.0.so；"
-                    "Windows 直连控制需要接入 HCanbus.dll 后端"
-                ),
+                message="使用 Windows CANFD 运行库",
+                driver="hcanbus",
             )
         return NativeLibraryStatus(
             libcanbus=None,
             libusb=None,
             source="",
-            message="Windows 下未找到官方 HCanbus.dll；当前直连后端也不能加载 Linux libcanbus.so/libusb-1.0.so",
+            message="Windows 下未找到 CANFD 运行库；可设置 O20_CANFD_DLL 指向目标文件",
+            driver="hcanbus",
         )
 
     system_status = _find_existing_library_pair([Path("/usr/local/lib")])
@@ -127,6 +139,7 @@ def ensure_canfd_native_libraries(sdk_root: str | Path | None = None) -> NativeL
             libusb=system_status.libusb,
             source="/usr/local/lib",
             message="使用系统 CANFD 动态库",
+            driver="libcanbus",
         )
 
     runtime_root = PROJECT_ROOT / "runtime" / "native_libs"
@@ -140,6 +153,7 @@ def ensure_canfd_native_libraries(sdk_root: str | Path | None = None) -> NativeL
                 libusb=existing.libusb,
                 source=existing.source,
                 message="使用已解包的本地 CANFD 动态库",
+                driver="libcanbus",
             )
         try:
             _safe_extract_archive(archive, target)
@@ -152,6 +166,7 @@ def ensure_canfd_native_libraries(sdk_root: str | Path | None = None) -> NativeL
                 libusb=extracted.libusb,
                 source=str(archive),
                 message=f"已从 {archive.name} 解包 CANFD 动态库",
+                driver="libcanbus",
             )
 
     return NativeLibraryStatus(
@@ -159,10 +174,13 @@ def ensure_canfd_native_libraries(sdk_root: str | Path | None = None) -> NativeL
         libusb=None,
         source="",
         message="未找到 libcanbus.so/libusb-1.0.so，也未找到可用 libcanbus*.tar",
+        driver="libcanbus",
     )
 
 
-def patch_official_canfd_loader(module, status: NativeLibraryStatus) -> None:
+def patch_canfd_loader(module, status: NativeLibraryStatus) -> None:
+    if status.uses_hcanbus:
+        raise RuntimeError("当前 CANFD 控制器不能加载 Windows 运行库，请使用 Windows 直连后端")
     if not status.ready:
         raise RuntimeError(status.message or "CANFD 动态库未就绪")
     original_cdll = module.CDLL

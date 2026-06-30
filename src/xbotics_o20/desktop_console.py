@@ -235,7 +235,7 @@ SIDE_OPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _default_official_hand_dance_dir() -> Path:
+def _default_hand_dance_dir() -> Path:
     return PROJECT_ROOT.parent / "code" / "O20_hand_ui_canfd_release_2026_04_27" / "hand_dance"
 
 
@@ -688,7 +688,7 @@ class ActionLibraryPanel(QFrame):
         return {
             "preset": "预设手势",
             "system": "系统动作",
-            "demo": "官方 demo",
+            "demo": "demo",
             "custom": "自定义",
             "draft": "草稿",
             "raw": "原始动作",
@@ -1676,8 +1676,8 @@ class MainWindow(QMainWindow):
         self._connect_btn.clicked.connect(self._connect_backend)
         self._settings_btn = QPushButton("设置")
         self._settings_btn.clicked.connect(self._show_settings)
-        self._import_demo_btn = QPushButton("导入官方动作")
-        self._import_demo_btn.clicked.connect(self._import_official_demo_actions)
+        self._import_demo_btn = QPushButton("导入 hand_dance")
+        self._import_demo_btn.clicked.connect(self._import_hand_dance_actions)
         self._macro_btn = QPushButton("宏功能")
         self._macro_btn.clicked.connect(self._show_macro_dialog)
         self._read_btn = QPushButton("刷新读数")
@@ -2321,27 +2321,27 @@ class MainWindow(QMainWindow):
         self._load_actions()
         self._log_line(f"已保存动作：{action.title}")
 
-    def _import_official_demo_actions(self) -> None:
-        default_dir = _default_official_hand_dance_dir()
+    def _import_hand_dance_actions(self) -> None:
+        default_dir = _default_hand_dance_dir()
         if default_dir.exists():
             source_dir = default_dir
         else:
-            selected = QFileDialog.getExistingDirectory(self, "选择官方 hand_dance 动作目录", str(PROJECT_ROOT.parent))
+            selected = QFileDialog.getExistingDirectory(self, "选择 hand_dance 动作目录", str(PROJECT_ROOT.parent))
             if not selected:
                 return
             source_dir = Path(selected)
         try:
             imported = self._import_demo_actions(source_dir)
         except Exception as exc:
-            QMessageBox.critical(self, "导入官方动作失败", str(exc))
-            self._log_line(f"导入官方动作失败：{exc}")
+            QMessageBox.critical(self, "导入 hand_dance 失败", str(exc))
+            self._log_line(f"导入 hand_dance 失败：{exc}")
             return
         self._load_actions()
         self._right_tabs.setCurrentWidget(self._action_panel)
         names = "、".join(action.title for action in imported[:6])
         suffix = f" 等 {len(imported)} 个" if len(imported) > 6 else ""
-        self._info_panel.set_status(f"已导入官方动作：{len(imported)} 个", ok=True)
-        self._log_line(f"已从 {source_dir} 导入官方动作：{names}{suffix}")
+        self._info_panel.set_status(f"已导入 hand_dance：{len(imported)} 个", ok=True)
+        self._log_line(f"已从 {source_dir} 导入 hand_dance：{names}{suffix}")
 
     def _import_demo_actions(self, source_dir: Path) -> list[ActionDefinition]:
         source_paths = sorted(source_dir.glob("*.txt"))
@@ -2628,6 +2628,7 @@ class MainWindow(QMainWindow):
                 detection.landmarks,
                 previous=self._teleop_last_pose,
                 smoothing=0.45,
+                handedness=getattr(detection, "handedness", None),
             )
         except Exception as exc:
             self._update_teleop_status(f"遥控：姿态解析失败 {exc}", ok=False)

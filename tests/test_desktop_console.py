@@ -137,7 +137,7 @@ def test_main_window_moves_manual_control_to_left_and_removes_right_manual_tab(t
     window.deleteLater()
 
 
-def test_main_window_imports_official_hand_dance_txt(tmp_path) -> None:
+def test_main_window_imports_hand_dance_txt(tmp_path) -> None:
     _app()
     source_dir = tmp_path / "hand_dance"
     source_dir.mkdir()

@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from .joints import HOME_POSITIONS, clamp_positions
+from .joints import HOME_POSITIONS, JOINTS, clamp_positions
 
 
 @dataclass(frozen=True)
@@ -13,9 +13,54 @@ class TeleopPose:
     flexions: dict[str, float]
 
 
+O20_TELEOP_OPEN = tuple(HOME_POSITIONS)
+O20_TELEOP_CLOSED = (
+    JOINTS[0].max_value,
+    JOINTS[1].max_value,
+    JOINTS[2].min_value,
+    JOINTS[3].min_value,
+    0.0,
+    JOINTS[5].max_value,
+    JOINTS[6].max_value,
+    0.0,
+    JOINTS[8].max_value,
+    JOINTS[9].max_value,
+    0.0,
+    JOINTS[11].max_value,
+    JOINTS[12].max_value,
+    0.0,
+    JOINTS[14].max_value,
+    JOINTS[15].max_value,
+)
+
+
 def _xyz(landmarks: Sequence[Any], index: int) -> tuple[float, float, float]:
     lm = landmarks[index]
     return float(lm.x), float(lm.y), float(lm.z)
+
+
+def _xy(landmarks: Sequence[Any], index: int) -> tuple[float, float]:
+    lm = landmarks[index]
+    return float(lm.x), float(lm.y)
+
+
+def _sub2(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float]:
+    return a[0] - b[0], a[1] - b[1]
+
+
+def _dot2(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return a[0] * b[0] + a[1] * b[1]
+
+
+def _norm2(v: tuple[float, float]) -> float:
+    return math.sqrt(v[0] * v[0] + v[1] * v[1])
+
+
+def _normalize2(v: tuple[float, float]) -> tuple[float, float] | None:
+    length = _norm2(v)
+    if length < 1e-8:
+        return None
+    return v[0] / length, v[1] / length
 
 
 def _angle(a, b, c) -> float:
@@ -68,42 +113,83 @@ def _smooth_positions(target: list[float], previous: Sequence[float] | None, smo
     return [float(prev + (cur - prev) * alpha) for prev, cur in zip(previous, target)]
 
 
+def _joint_from_flexion(index: int, ratio: float) -> float:
+    return _lerp(O20_TELEOP_OPEN[index], O20_TELEOP_CLOSED[index], ratio)
+
+
+def _palm_basis(landmarks: Sequence[Any]) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    x_axis = _normalize2(_sub2(_xy(landmarks, 17), _xy(landmarks, 5)))
+    y_axis = _normalize2(_sub2(_xy(landmarks, 9), _xy(landmarks, 0)))
+    if x_axis is None or y_axis is None:
+        return None
+    return x_axis, y_axis
+
+
+def _finger_splay_angle(landmarks: Sequence[Any], mcp: int, pip: int, basis) -> float:
+    if basis is None:
+        return 0.0
+    x_axis, y_axis = basis
+    direction = _normalize2(_sub2(_xy(landmarks, pip), _xy(landmarks, mcp)))
+    if direction is None:
+        return 0.0
+    lateral = _dot2(direction, x_axis)
+    forward = _dot2(direction, y_axis)
+    if abs(lateral) < 0.015:
+        return 0.0
+    return math.degrees(math.atan2(lateral, max(0.15, forward)))
+
+
+def _joint_from_splay(index: int, angle: float, flexion: float, *, invert: bool = False) -> float:
+    signed = -angle if invert else angle
+    joint = JOINTS[index]
+    raw = max(joint.min_value, min(joint.max_value, signed * 2.4))
+    damped = _lerp(raw, 0.0, max(0.0, min(0.65, flexion * 0.65)))
+    return max(joint.min_value, min(joint.max_value, damped))
+
+
 def landmarks_to_o20_positions(
     landmarks: Sequence[Any],
     *,
     previous: Sequence[float] | None = None,
     smoothing: float = 0.45,
+    handedness: str | None = None,
 ) -> TeleopPose:
     if len(landmarks) < 21:
         raise ValueError("MediaPipe 手部骨架必须包含 21 个点")
+    _ = handedness
 
     thumb_base, thumb_tip = _thumb_flexion(landmarks)
     index_base, index_tip = _finger_flexion(landmarks, 5, 6, 7, 8)
     middle_base, middle_tip = _finger_flexion(landmarks, 9, 10, 11, 12)
     ring_base, ring_tip = _finger_flexion(landmarks, 13, 14, 15, 16)
     pinky_base, pinky_tip = _finger_flexion(landmarks, 17, 18, 19, 20)
+    basis = _palm_basis(landmarks)
+    index_splay = _finger_splay_angle(landmarks, 5, 6, basis)
+    middle_splay = _finger_splay_angle(landmarks, 9, 10, basis)
+    ring_splay = _finger_splay_angle(landmarks, 13, 14, basis)
+    pinky_splay = _finger_splay_angle(landmarks, 17, 18, basis)
 
-    positions = list(HOME_POSITIONS)
-    positions[0] = _lerp(35.0, 120.0, thumb_base)
-    positions[1] = _lerp(35.0, 150.0, thumb_tip)
-    positions[2] = _lerp(160.0, 0.0, thumb_base)
-    positions[3] = _lerp(64.0, 0.0, thumb_base)
+    positions = list(O20_TELEOP_OPEN)
+    positions[0] = _joint_from_flexion(0, thumb_base)
+    positions[1] = _joint_from_flexion(1, thumb_tip)
+    positions[2] = _joint_from_flexion(2, thumb_base)
+    positions[3] = _joint_from_flexion(3, thumb_base)
 
-    positions[4] = _lerp(-30.0, 0.0, index_base)
-    positions[5] = _lerp(0.0, 180.0, index_base)
-    positions[6] = _lerp(0.0, 180.0, index_tip)
+    positions[4] = _joint_from_splay(4, index_splay, index_base)
+    positions[5] = _joint_from_flexion(5, index_base)
+    positions[6] = _joint_from_flexion(6, index_tip)
 
-    positions[7] = 0.0
-    positions[8] = _lerp(0.0, 180.0, middle_base)
-    positions[9] = _lerp(0.0, 180.0, middle_tip)
+    positions[7] = _joint_from_splay(7, middle_splay, middle_base)
+    positions[8] = _joint_from_flexion(8, middle_base)
+    positions[9] = _joint_from_flexion(9, middle_tip)
 
-    positions[10] = 0.0
-    positions[11] = _lerp(0.0, 180.0, ring_base)
-    positions[12] = _lerp(0.0, 180.0, ring_tip)
+    positions[10] = _joint_from_splay(10, ring_splay, ring_base)
+    positions[11] = _joint_from_flexion(11, ring_base)
+    positions[12] = _joint_from_flexion(12, ring_tip)
 
-    positions[13] = _lerp(-20.0, 0.0, pinky_base)
-    positions[14] = _lerp(0.0, 180.0, pinky_base)
-    positions[15] = _lerp(0.0, 180.0, pinky_tip)
+    positions[13] = _joint_from_splay(13, pinky_splay, pinky_base, invert=True)
+    positions[14] = _joint_from_flexion(14, pinky_base)
+    positions[15] = _joint_from_flexion(15, pinky_tip)
 
     smoothed = clamp_positions(_smooth_positions(positions, previous, smoothing))
     return TeleopPose(
@@ -114,5 +200,9 @@ def landmarks_to_o20_positions(
             "middle": middle_base,
             "ring": ring_base,
             "pinky": pinky_base,
+            "index_splay": index_splay,
+            "middle_splay": middle_splay,
+            "ring_splay": ring_splay,
+            "pinky_splay": pinky_splay,
         },
     )

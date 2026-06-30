@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .canfd_driver import NativeCanfdBus
 from .native_libs import ensure_canfd_native_libraries
 from .process_lock import CanfdProcessLock
 
@@ -96,8 +97,9 @@ def _decode_bytes(value: bytes) -> str:
 def _native_payload(native) -> dict[str, Any]:
     return {
         "ready": native.ready,
-        "source": native.source,
+        "runtime_path": native.source,
         "message": native.message,
+        "driver": native.driver,
         "libcanbus": str(native.libcanbus) if native.libcanbus else None,
         "libusb": str(native.libusb) if native.libusb else None,
     }
@@ -181,6 +183,20 @@ def _empty_read_message(device_id: int, register_addr: int) -> CanFDMsg:
 
 
 def _receive_frames(canbus, *, canfd_device: int, channel: int, timeout_ms: int, max_frames: int = 200) -> tuple[int, list[CanFdFrame]]:
+    if hasattr(canbus, "receive"):
+        ret, raw_frames = canbus.receive(timeout_ms=timeout_ms, max_frames=max_frames)
+        return ret, [
+            CanFdFrame(
+                frame_id=frame.frame_id,
+                device_id=frame.device_id,
+                register=frame.register,
+                is_write=frame.is_write,
+                dlc=frame.dlc,
+                data_length=len(frame.data),
+                data_hex=frame.data.hex().upper(),
+            )
+            for frame in raw_frames
+        ]
     buffer = (CanFDMsg * max_frames)()
     ret = int(canbus.CANFD_Receive(canfd_device, channel, buffer, max_frames, int(timeout_ms)))
     frames: list[CanFdFrame] = []
@@ -230,8 +246,11 @@ def _query_device_info(
     matched_frames: list[CanFdFrame] = []
     for attempt in range(1, attempts + 1):
         flushed = _flush_receive_buffer(canbus, canfd_device=canfd_device, channel=channel)
-        msg = _empty_read_message(device_id, REGISTER_DEVICE_INFO)
-        tx_ret = int(canbus.CANFD_Transmit(canfd_device, channel, ctypes.byref(msg), 1, 200))
+        if hasattr(canbus, "send_register"):
+            tx_ret = int(canbus.send_register(device_id=device_id, register_addr=REGISTER_DEVICE_INFO, data=b"", is_write=False))
+        else:
+            msg = _empty_read_message(device_id, REGISTER_DEVICE_INFO)
+            tx_ret = int(canbus.CANFD_Transmit(canfd_device, channel, ctypes.byref(msg), 1, 200))
         rx_ret, frames = _receive_frames(canbus, canfd_device=canfd_device, channel=channel, timeout_ms=timeout_ms)
         matches = [
             frame
@@ -292,7 +311,8 @@ def run_canfd_diagnostics(
         result["diagnosis"] = "同一块 USB-CANFD 同一时间只能被一个进程打开；请关闭控制台或停止其它诊断命令后重试。"
         return result
     try:
-        native = ensure_canfd_native_libraries(sdk_root)
+        canbus = NativeCanfdBus(canfd_device=canfd_device, channel=channel, sdk_root=sdk_root)
+        native = canbus.load()
         result["library"] = _native_payload(native)
         steps.append(_step("resolve_native_libraries", native.ready, message=native.message))
         if not native.ready:
@@ -300,26 +320,21 @@ def run_canfd_diagnostics(
             result["diagnosis"] = "CANFD 动态库不可用，无法继续诊断。"
             return result
 
-        ctypes.CDLL(str(native.libusb), mode=ctypes.RTLD_GLOBAL)
-        canbus = ctypes.CDLL(str(native.libcanbus))
-        _configure_canbus_functions(canbus)
-
-        scan_count = int(canbus.CAN_ScanDevice())
+        scan_count = int(canbus.scan_devices())
         result["scan_count"] = scan_count
         steps.append(_step("CAN_ScanDevice", scan_count > 0, ret=scan_count))
         if scan_count <= 0:
             result["diagnosis"] = "未扫描到 USB-CANFD 适配器；检查 USB 连接、驱动和占用。"
             return result
 
-        ret = int(canbus.CAN_OpenDevice(canfd_device, channel))
+        ret = int(canbus.open_device())
         opened = ret == STATUS_OK
         steps.append(_step("CAN_OpenDevice", opened, ret=ret, canfd_device=canfd_device, channel=channel))
         if not opened:
             result["diagnosis"] = "CANFD 适配器扫描到了，但打开失败；常见原因是设备号不对、权限不足或被其它进程占用。"
             return result
 
-        devinfo = DevInfo()
-        ret = int(canbus.CAN_ReadDevInfo(canfd_device, ctypes.byref(devinfo)))
+        ret, devinfo = canbus.read_device_info()
         steps.append(_step("CAN_ReadDevInfo", ret == STATUS_OK, ret=ret))
         if ret == STATUS_OK:
             result["adapter_device_info"] = {
@@ -330,14 +345,13 @@ def run_canfd_diagnostics(
                 "manufacture_date": _decode_bytes(bytes(devinfo.MF_Date)),
             }
 
-        config = _default_config()
-        ret = int(canbus.CANFD_Init(canfd_device, channel, ctypes.byref(config)))
+        ret = int(canbus.init_canfd())
         steps.append(_step("CANFD_Init", ret == STATUS_OK, ret=ret, nominal_baud=1000000, data_baud=5000000))
         if ret != STATUS_OK:
             result["diagnosis"] = "适配器已打开，但 CANFD_Init 失败；检查驱动、通道和是否被其它进程占用。"
             return result
 
-        ret = int(canbus.CAN_SetFilter(canfd_device, channel, 0, 0, 0, 0, 1))
+        ret = int(canbus.set_filter())
         steps.append(_step("CAN_SetFilter", ret == STATUS_OK, ret=ret))
         if ret != STATUS_OK:
             result["diagnosis"] = "CANFD 过滤器设置失败；适配器驱动或通道状态异常。"
@@ -370,7 +384,7 @@ def run_canfd_diagnostics(
     finally:
         if opened and canbus is not None:
             try:
-                ret = int(canbus.CAN_CloseDevice(canfd_device, channel))
+                ret = int(canbus.close_device())
                 steps.append(_step("CAN_CloseDevice", ret == STATUS_OK, ret=ret))
             except Exception as exc:
                 steps.append(_step("CAN_CloseDevice", False, error=str(exc)))

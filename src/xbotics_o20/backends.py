@@ -12,7 +12,8 @@ from typing import Protocol
 
 from .config import O20Config, PROJECT_ROOT, WORKSPACE_ROOT, resolve_project_path
 from .device_scan import scan_sys_usb
-from .native_libs import NativeLibraryStatus, ensure_canfd_native_libraries, patch_official_canfd_loader
+from .native_libs import NativeLibraryStatus, ensure_canfd_native_libraries, patch_canfd_loader
+from .native_o20 import NativeO20Controller
 from .process_lock import CanfdProcessLock
 from .joints import (
     HOME_POSITIONS,
@@ -111,7 +112,7 @@ def _candidate_sdk_paths(sdk_root: str | Path | None) -> list[Path]:
     return paths
 
 
-def _load_official_controller(sdk_root: str | Path | None):
+def _load_ros2_canfd_controller(sdk_root: str | Path | None):
     last_error: Exception | None = None
     module_name = "linker_hand_o20_ros2.core.canfd.linker_hand_o20_canfd"
     for path in _candidate_sdk_paths(sdk_root):
@@ -119,7 +120,7 @@ def _load_official_controller(sdk_root: str | Path | None):
             sys.path.insert(0, str(path))
         try:
             module = importlib.import_module(module_name)
-            patch_official_canfd_loader(module, ensure_canfd_native_libraries(sdk_root))
+            patch_canfd_loader(module, ensure_canfd_native_libraries(sdk_root))
             return module.LinkerHandO20Controller
         except Exception as exc:
             last_error = exc
@@ -208,8 +209,11 @@ class DirectO20Backend:
             if not self._native_status.ready:
                 self._error = self._native_status.message
                 raise O20BackendError(self._native_status.message)
-            controller_cls = _load_official_controller(self.sdk_root)
-            controller = controller_cls(hand_type=self.side, canfd_device=self.canfd_device)
+            if self._native_status.uses_hcanbus:
+                controller = NativeO20Controller(hand_type=self.side, canfd_device=self.canfd_device, sdk_root=self.sdk_root)
+            else:
+                controller_cls = _load_ros2_canfd_controller(self.sdk_root)
+                controller = controller_cls(hand_type=self.side, canfd_device=self.canfd_device)
             with _quiet_sdk_output() as sdk_output:
                 ok, device_type = controller.connect()
             self._append_sdk_log(sdk_output.getvalue())
@@ -392,7 +396,7 @@ class Ros2TopicBackend:
                 "ROS2节点模式不可用：当前 Python "
                 f"{sys.version_info.major}.{sys.version_info.minor} 无法加载 ROS2 rclpy。"
                 "ROS2 Humble 通常绑定系统 Python 3.10；当前环境看起来不是 ROS2 节点环境。"
-                "连接 CANFD 实物请选择直连模式；只有已启动官方 ROS2 节点且 Python 环境匹配时才选择 ROS2节点模式。"
+                "连接 CANFD 实物请选择直连模式；只有已启动 ROS2 节点且 Python 环境匹配时才选择 ROS2节点模式。"
                 f"原始错误：{exc}"
             ) from exc
 

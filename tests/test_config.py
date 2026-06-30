@@ -94,3 +94,10 @@ def test_resolve_resource_path_finds_bundled_mediapipe_model():
 
     assert path.exists()
     assert path.name == "hand_landmarker.task"
+
+
+def test_resolve_resource_path_finds_bundled_hcanbus_dll():
+    path = resolve_resource_path("resources/canfd/win-x64/HCanbus.dll")
+
+    assert path.exists()
+    assert path.name == "HCanbus.dll"

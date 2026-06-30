@@ -360,7 +360,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe = subparsers.add_parser("probe-direct", help="只读探测直连模式的左右手和设备号，不发送动作")
     probe.add_argument("--max-device", type=int, default=1, help="最大 CANFD 设备号，默认 1")
     probe.add_argument("--json", action="store_true", help="输出 JSON")
-    probe.add_argument("--verbose", action="store_true", help="显示官方 SDK 初始化日志尾部")
+    probe.add_argument("--verbose", action="store_true", help="显示直连初始化日志尾部")
     probe.set_defaults(func=cmd_probe)
 
     canfd_diag = subparsers.add_parser("canfd-diag", help="底层只读诊断 CANFD 适配器和 O20 回包")

@@ -27,6 +27,7 @@ where = ["src"]
 "share/xbotics_o20/assets" = ["assets/hand_landmarker.task"]
 "share/xbotics_o20/runtime" = ["runtime/config.json"]
 "share/xbotics_o20/runtime/action_library" = ["runtime/action_library/actions.json"]
+"share/xbotics_o20/resources/canfd/win-x64" = ["resources/canfd/win-x64/HCanbus.dll", "resources/canfd/win-x64/README.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

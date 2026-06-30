@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ctypes
 import importlib
 import importlib.util
 import os
@@ -12,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .canfd_driver import NativeCanfdBus
 from .native_libs import ensure_canfd_native_libraries
 
 try:
@@ -187,8 +187,9 @@ def scan_libraries() -> dict[str, Any]:
     native = ensure_canfd_native_libraries()
     report["resolved"] = {
         "ready": native.ready,
-        "source": native.source,
+        "runtime_path": native.source,
         "message": native.message,
+        "driver": native.driver,
         "libcanbus": str(native.libcanbus) if native.libcanbus else None,
         "libusb": str(native.libusb) if native.libusb else None,
     }
@@ -198,13 +199,9 @@ def scan_libraries() -> dict[str, Any]:
 def scan_canfd_with_library() -> dict[str, Any]:
     report: dict[str, Any] = {"attempted": True, "count": None, "error": ""}
     try:
-        native = ensure_canfd_native_libraries()
-        if not native.ready:
-            raise OSError(native.message)
-        ctypes.CDLL(str(native.libusb), mode=ctypes.RTLD_GLOBAL)
-        canbus = ctypes.CDLL(str(native.libcanbus))
-        canbus.CAN_ScanDevice.restype = ctypes.c_int
-        report["count"] = int(canbus.CAN_ScanDevice())
+        canbus = NativeCanfdBus()
+        canbus.load()
+        report["count"] = int(canbus.scan_devices())
     except OSError as exc:
         report["error"] = f"加载动态库失败：{exc}"
     except Exception as exc:
@@ -268,7 +265,7 @@ def format_scan_report(report: ScanReport) -> str:
         lines.append(f"    libusb: {resolved.get('libusb')}")
     if report.canfd_library_scan is not None:
         scan = report.canfd_library_scan
-        lines.append("- libcanbus 扫描:")
+        lines.append("- CANFD 动态库扫描:")
         lines.append(f"  count: {scan.get('count')}")
         if scan.get("error"):
             lines.append(f"  error: {scan['error']}")
