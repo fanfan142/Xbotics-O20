@@ -63,6 +63,23 @@ def _candidate_archives(sdk_root: str | Path | None = None) -> list[Path]:
     return archives
 
 
+def _candidate_windows_dlls(sdk_root: str | Path | None = None) -> list[Path]:
+    roots = _sdk_roots(sdk_root)
+    roots.extend(
+        [
+            WORKSPACE_ROOT / "code" / "O20_hand_ui_canfd_release_2026_04_27",
+            WORKSPACE_ROOT / "action_generate_yx" / "demo" / "O20_hand_ui_canfd_release_2026_04_27",
+        ]
+    )
+    dlls: list[Path] = []
+    for root in roots:
+        for relative in ("HCanbus.dll", "_internal/HCanbus.dll"):
+            path = root / relative
+            if path.exists():
+                dlls.append(path)
+    return dlls
+
+
 def _find_existing_library_pair(paths: Iterable[Path]) -> NativeLibraryStatus | None:
     for root in paths:
         libcanbus = root / "libcanbus.so"
@@ -83,6 +100,26 @@ def _safe_extract_archive(archive: Path, target_dir: Path) -> None:
 
 
 def ensure_canfd_native_libraries(sdk_root: str | Path | None = None) -> NativeLibraryStatus:
+    if platform.system() == "Windows":
+        dlls = _candidate_windows_dlls(sdk_root)
+        if dlls:
+            return NativeLibraryStatus(
+                libcanbus=None,
+                libusb=None,
+                source=str(dlls[0]),
+                message=(
+                    f"检测到官方 Windows CANFD 动态库 {dlls[0]}，"
+                    "但当前直连后端仍使用 ROS2 SDK 的 Linux libcanbus.so/libusb-1.0.so；"
+                    "Windows 直连控制需要接入 HCanbus.dll 后端"
+                ),
+            )
+        return NativeLibraryStatus(
+            libcanbus=None,
+            libusb=None,
+            source="",
+            message="Windows 下未找到官方 HCanbus.dll；当前直连后端也不能加载 Linux libcanbus.so/libusb-1.0.so",
+        )
+
     system_status = _find_existing_library_pair([Path("/usr/local/lib")])
     if system_status is not None:
         return NativeLibraryStatus(

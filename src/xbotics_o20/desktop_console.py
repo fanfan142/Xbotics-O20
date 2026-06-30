@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QHBoxLayout,
+    QFileDialog,
+    QHeaderView,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -53,6 +55,7 @@ from .actions import (
     PRODUCT_REQUIRED_ACTION_NAMES,
     action_identity_from_prompt,
     load_actions,
+    load_demo_txt_action,
     normalize_action,
     save_actions,
     validate_action_library,
@@ -76,17 +79,22 @@ except Exception:  # pragma: no cover - optional Qt component
 
 APP_STYLE = """
 QMainWindow {
-    background: #f8fafc;
+    background: #f3f6fb;
 }
 QWidget {
     font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
-    background: #f8fafc;
+    background: #f3f6fb;
     color: #0f172a;
     font-size: 13px;
 }
 QFrame#Card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+QFrame#Toolbar, QFrame#CameraBar {
+    background: #ffffff;
+    border: 1px solid #dbe3eb;
     border-radius: 8px;
 }
 QLabel#SectionTitle {
@@ -98,6 +106,11 @@ QLabel#SectionTitle {
 QLabel#Subtle {
     background: transparent;
     color: #64748b;
+}
+QLabel#MetricValue {
+    background: transparent;
+    color: #0f172a;
+    font-weight: 700;
 }
 QLabel#StatusOk {
     background: transparent;
@@ -114,7 +127,7 @@ QPushButton {
     color: #0f172a;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
-    padding: 8px 14px;
+    padding: 8px 13px;
 }
 QPushButton:hover { background: #f1f5f9; border-color: #94a3b8; }
 QPushButton:pressed { background: #e2e8f0; }
@@ -131,9 +144,9 @@ QPushButton#Danger {
     border-color: #fecdd3;
 }
 QPushButton#ActionButton {
-    min-width: 76px;
-    min-height: 34px;
-    padding: 5px 8px;
+    min-width: 92px;
+    min-height: 36px;
+    padding: 6px 10px;
 }
 QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QTextEdit, QListWidget, QTableWidget {
     background: #ffffff;
@@ -149,7 +162,7 @@ QTabWidget::pane {
 QTabBar::tab {
     background: #e2e8f0;
     color: #334155;
-    padding: 8px 14px;
+    padding: 8px 16px;
     border: 1px solid #cbd5e1;
 }
 QTabBar::tab:selected {
@@ -170,13 +183,13 @@ QProgressBar::chunk {
 }
 QSlider::groove:horizontal {
     height: 5px;
-    background: #cbd5e1;
+    background: #d4dde8;
     border-radius: 2px;
 }
 QSlider::handle:horizontal {
-    width: 14px;
+    width: 16px;
     margin: -5px 0;
-    border-radius: 7px;
+    border-radius: 8px;
     background: #0f766e;
 }
 QScrollArea {
@@ -185,7 +198,7 @@ QScrollArea {
 }
 QTableWidget {
     gridline-color: #e2e8f0;
-    alternate-background-color: #f8fafc;
+    alternate-background-color: #f7fafc;
     selection-background-color: #dbeafe;
 }
 QHeaderView::section {
@@ -220,6 +233,10 @@ SIDE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("left", "左手"),
     ("right", "右手"),
 )
+
+
+def _default_official_hand_dance_dir() -> Path:
+    return PROJECT_ROOT.parent / "code" / "O20_hand_ui_canfd_release_2026_04_27" / "hand_dance"
 
 
 def _card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
@@ -264,6 +281,32 @@ def _gesture_runtime_label(status: str) -> str:
     if status == "MediaPipe 就绪":
         return "手势识别就绪"
     return status.replace("MediaPipe", "手势识别")
+
+
+def _camera_status_label(text: str) -> str:
+    text = text.replace("状态：", "")
+    if "未启动" in text:
+        return "未启动"
+    if "运行中" in text:
+        return "运行中"
+    if "启动失败" in text:
+        return "启动失败"
+    if "不可用" in text:
+        return "识别不可用"
+    return text[:10]
+
+
+def _teleop_status_label(text: str) -> str:
+    text = text.replace("遥控：", "")
+    labels = {
+        "关闭": "遥控关",
+        "等待摄像头": "等摄像头",
+        "等待手部识别": "等手势",
+        "请先连接设备": "未连接",
+        "动作执行中暂停": "动作暂停",
+        "发送失败": "发送失败",
+    }
+    return labels.get(text, text[:10])
 
 
 def _populate_combo(combo: QComboBox, options: tuple[tuple[str, str], ...], current_value: str) -> None:
@@ -444,9 +487,10 @@ class InfoPanel(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("Card")
+        self.setMinimumWidth(390)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
         head = QHBoxLayout()
         title = QLabel("实时读取")
         title.setObjectName("SectionTitle")
@@ -459,8 +503,9 @@ class InfoPanel(QFrame):
 
         self._summary: dict[str, QLabel] = {}
         summary = QGridLayout()
-        summary.setHorizontalSpacing(12)
-        summary.setVerticalSpacing(5)
+        summary.setColumnStretch(1, 1)
+        summary.setHorizontalSpacing(14)
+        summary.setVerticalSpacing(6)
         for index, (key, value) in enumerate([
             ("连接", "未连接"),
             ("连接方式", "--"),
@@ -478,13 +523,18 @@ class InfoPanel(QFrame):
         self._telemetry.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self._telemetry.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._telemetry.setAlternatingRowColors(True)
-        self._telemetry.setMinimumHeight(340)
-        self._telemetry.setColumnWidth(0, 38)
-        self._telemetry.setColumnWidth(1, 92)
-        self._telemetry.setColumnWidth(2, 66)
-        self._telemetry.setColumnWidth(3, 76)
-        self._telemetry.setColumnWidth(4, 72)
-        self._telemetry.horizontalHeader().setStretchLastSection(True)
+        self._telemetry.setMinimumHeight(260)
+        self._telemetry.setMinimumWidth(360)
+        self._telemetry.setColumnWidth(0, 42)
+        self._telemetry.setColumnWidth(1, 116)
+        self._telemetry.setColumnWidth(2, 64)
+        self._telemetry.setColumnWidth(3, 70)
+        self._telemetry.setColumnWidth(4, 64)
+        header = self._telemetry.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for column in (2, 3, 4, 5):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         self._telemetry_items: dict[tuple[int, str], QTableWidgetItem] = {}
         for row, joint in enumerate(JOINTS):
             self._set_static_cell(row, 0, f"{joint.index + 1:02d}")
@@ -496,23 +546,17 @@ class InfoPanel(QFrame):
                 self._telemetry_items[(row, key)] = item
         layout.addWidget(self._telemetry, 1)
 
-        public_head = QLabel("ROS2 姿态数据")
-        public_head.setObjectName("Subtle")
-        layout.addWidget(public_head)
         self._public20_label = QLabel("--")
-        self._public20_label.setWordWrap(True)
-        self._public20_label.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; color: #334155;")
-        layout.addWidget(self._public20_label)
 
     def _add_summary_cell(self, layout: QGridLayout, index: int, key: str, value: str) -> None:
-        row = index // 2
-        col = (index % 2) * 2
+        row = index
         name = QLabel(key)
         name.setObjectName("Subtle")
         val = QLabel(value)
-        val.setStyleSheet("background: transparent; font-weight: 700;")
-        layout.addWidget(name, row, col)
-        layout.addWidget(val, row, col + 1)
+        val.setObjectName("MetricValue")
+        val.setWordWrap(True)
+        layout.addWidget(name, row, 0)
+        layout.addWidget(val, row, 1)
         self._summary[key] = val
 
     def _set_static_cell(self, row: int, column: int, text: str, *, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignCenter) -> None:
@@ -1609,10 +1653,14 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(10)
 
         toolbar, toolbar_layout = _card()
+        toolbar.setObjectName("Toolbar")
+        toolbar.setMinimumHeight(66)
         toolbar_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+        toolbar_layout.setSpacing(8)
         self._backend_combo = QComboBox()
         _populate_combo(self._backend_combo, BACKEND_OPTIONS, self._config.o20.backend)
         self._side_combo = QComboBox()
@@ -1628,6 +1676,8 @@ class MainWindow(QMainWindow):
         self._connect_btn.clicked.connect(self._connect_backend)
         self._settings_btn = QPushButton("设置")
         self._settings_btn.clicked.connect(self._show_settings)
+        self._import_demo_btn = QPushButton("导入官方动作")
+        self._import_demo_btn.clicked.connect(self._import_official_demo_actions)
         self._macro_btn = QPushButton("宏功能")
         self._macro_btn.clicked.connect(self._show_macro_dialog)
         self._read_btn = QPushButton("刷新读数")
@@ -1644,7 +1694,13 @@ class MainWindow(QMainWindow):
             QLabel("手型"), self._side_combo,
             QLabel("设备"), self._device_spin,
             QLabel("速度"), self._speed_spin,
-            self._connect_btn, self._settings_btn, self._macro_btn, self._read_btn, self._scan_btn, self._stop_btn,
+            self._connect_btn,
+            self._settings_btn,
+            self._import_demo_btn,
+            self._macro_btn,
+            self._read_btn,
+            self._scan_btn,
+            self._stop_btn,
         ]:
             toolbar_layout.addWidget(widget)
         toolbar_layout.addStretch(1)
@@ -1655,30 +1711,33 @@ class MainWindow(QMainWindow):
         outer.addWidget(splitter, 1)
 
         left = QWidget()
+        left.setMinimumWidth(860)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(8)
+        left_layout.setSpacing(10)
 
         left_middle = QSplitter(Qt.Orientation.Horizontal)
         self._info_panel = InfoPanel()
         self._manual_panel = self._build_manual_tab()
+        self._manual_panel.setMinimumWidth(430)
         left_middle.addWidget(self._info_panel)
         left_middle.addWidget(self._manual_panel)
         left_middle.setMinimumHeight(360)
-        left_middle.setSizes([420, 520])
+        left_middle.setSizes([410, 500])
         left_layout.addWidget(left_middle, 1)
 
         left_bottom = QSplitter(Qt.Orientation.Horizontal)
         left_bottom.addWidget(self._build_twin_tab())
         left_bottom.addWidget(self._build_log_panel())
-        left_bottom.setSizes([560, 320])
+        left_bottom.setSizes([560, 300])
         left_layout.addWidget(left_bottom, 1)
         splitter.addWidget(left)
 
         right = QWidget()
+        right.setMinimumWidth(500)
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(8)
+        right_layout.setSpacing(10)
         right_layout.addWidget(self._build_camera_bar(), 0)
         right_tabs = QTabWidget()
         self._right_tabs = right_tabs
@@ -1694,7 +1753,7 @@ class MainWindow(QMainWindow):
         right_tabs.addTab(self._macro_panel, "宏功能")
         right_layout.addWidget(right_tabs, 1)
         splitter.addWidget(right)
-        splitter.setSizes([900, 520])
+        splitter.setSizes([900, 500])
         self._side_combo.currentIndexChanged.connect(self._on_side_changed)
         self._apply_side_to_visual(self._config.o20.side, update_combo=True)
 
@@ -1761,7 +1820,10 @@ class MainWindow(QMainWindow):
 
     def _build_camera_bar(self) -> QWidget:
         camera_bar, camera_layout = _card()
+        camera_bar.setObjectName("CameraBar")
+        camera_bar.setMinimumHeight(64)
         camera_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+        camera_layout.setSpacing(8)
         camera_layout.addWidget(QLabel("摄像头"))
         self._camera_index_spin = QSpinBox()
         self._camera_index_spin.setRange(0, 16)
@@ -1781,15 +1843,21 @@ class MainWindow(QMainWindow):
         camera_layout.addWidget(self._teleop_rate_spin)
         self._camera_toggle_btn = QPushButton("启动摄像头")
         self._camera_toggle_btn.setObjectName("Primary")
+        self._camera_toggle_btn.setMinimumWidth(108)
         self._camera_toggle_btn.clicked.connect(self._toggle_camera)
         camera_layout.addWidget(self._camera_toggle_btn)
-        self._camera_status = QLabel("状态：未启动")
+        self._camera_status = QLabel("未启动")
         self._camera_status.setObjectName("Subtle")
-        camera_layout.addWidget(self._camera_status, 1)
-        self._teleop_status = QLabel("遥控：关闭")
+        self._camera_status.setMinimumWidth(64)
+        self._camera_status.setToolTip("状态：未启动")
+        camera_layout.addWidget(self._camera_status)
+        self._teleop_status = QLabel("遥控关")
         self._teleop_status.setObjectName("Subtle")
+        self._teleop_status.setMinimumWidth(72)
+        self._teleop_status.setToolTip("遥控：关闭")
         camera_layout.addWidget(self._teleop_status)
         self._mediapipe_status = QLabel()
+        self._mediapipe_status.setMinimumWidth(78)
         self._refresh_mediapipe_status()
         camera_layout.addWidget(self._mediapipe_status)
         return camera_bar
@@ -2253,6 +2321,39 @@ class MainWindow(QMainWindow):
         self._load_actions()
         self._log_line(f"已保存动作：{action.title}")
 
+    def _import_official_demo_actions(self) -> None:
+        default_dir = _default_official_hand_dance_dir()
+        if default_dir.exists():
+            source_dir = default_dir
+        else:
+            selected = QFileDialog.getExistingDirectory(self, "选择官方 hand_dance 动作目录", str(PROJECT_ROOT.parent))
+            if not selected:
+                return
+            source_dir = Path(selected)
+        try:
+            imported = self._import_demo_actions(source_dir)
+        except Exception as exc:
+            QMessageBox.critical(self, "导入官方动作失败", str(exc))
+            self._log_line(f"导入官方动作失败：{exc}")
+            return
+        self._load_actions()
+        self._right_tabs.setCurrentWidget(self._action_panel)
+        names = "、".join(action.title for action in imported[:6])
+        suffix = f" 等 {len(imported)} 个" if len(imported) > 6 else ""
+        self._info_panel.set_status(f"已导入官方动作：{len(imported)} 个", ok=True)
+        self._log_line(f"已从 {source_dir} 导入官方动作：{names}{suffix}")
+
+    def _import_demo_actions(self, source_dir: Path) -> list[ActionDefinition]:
+        source_paths = sorted(source_dir.glob("*.txt"))
+        if not source_paths:
+            raise ValueError(f"目录中没有 txt 动作文件：{source_dir}")
+        imported = [load_demo_txt_action(path) for path in source_paths]
+        by_name = {action.name: action for action in self._actions}
+        by_name.update({action.name: action for action in imported})
+        self._actions = list(by_name.values())
+        save_actions(self._actions_path, self._actions)
+        return imported
+
     def _copy_public20(self) -> None:
         public20 = motor17_to_public20(self._joint_editor.positions())
         QApplication.clipboard().setText(json.dumps(public20, ensure_ascii=False))
@@ -2423,20 +2524,27 @@ class MainWindow(QMainWindow):
         self._teleop_status.setObjectName("StatusOk" if ok else "StatusBad")
         self._teleop_status.style().unpolish(self._teleop_status)
         self._teleop_status.style().polish(self._teleop_status)
-        self._teleop_status.setText(text)
+        self._teleop_status.setText(_teleop_status_label(text))
+        self._teleop_status.setToolTip(text)
+
+    def _set_camera_status(self, text: str) -> None:
+        self._camera_status.setText(_camera_status_label(text))
+        self._camera_status.setToolTip(text)
 
     def _refresh_mediapipe_status(self, status: str | None = None) -> str:
         status = status or camera_mod.camera_runtime_status()
         self._mediapipe_status.setObjectName("StatusOk" if status == "MediaPipe 就绪" else "StatusBad")
         self._mediapipe_status.style().unpolish(self._mediapipe_status)
         self._mediapipe_status.style().polish(self._mediapipe_status)
-        self._mediapipe_status.setText(_gesture_runtime_label(status))
+        label = _gesture_runtime_label(status).replace("手势识别", "识别")
+        self._mediapipe_status.setText(label[:10])
+        self._mediapipe_status.setToolTip(_gesture_runtime_label(status))
         return status
 
     def _start_camera(self) -> None:
         runtime_status = self._refresh_mediapipe_status()
         if runtime_status != "MediaPipe 就绪":
-            self._camera_status.setText(f"状态：手势识别不可用（{_gesture_runtime_label(runtime_status)}）")
+            self._set_camera_status(f"状态：手势识别不可用（{_gesture_runtime_label(runtime_status)}）")
             self._log_line(f"手势识别不可用：{_gesture_runtime_label(runtime_status)}")
             return
         self._config.camera.camera_index = self._camera_index_spin.value()
@@ -2446,7 +2554,7 @@ class MainWindow(QMainWindow):
             detection_fps=self._config.camera.detection_fps,
         )
         if not self._camera_service.start():
-            self._camera_status.setText(f"状态：启动失败（{self._camera_service.last_error or '未知错误'}）")
+            self._set_camera_status(f"状态：启动失败（{self._camera_service.last_error or '未知错误'}）")
             if self._camera_service.last_error and "MediaPipe" in self._camera_service.last_error:
                 self._refresh_mediapipe_status(self._camera_service.last_error)
             else:
@@ -2458,9 +2566,9 @@ class MainWindow(QMainWindow):
         self._camera_toggle_btn.setText("停止摄像头")
         self._camera_index_spin.setEnabled(False)
         if self._camera_service.last_error:
-            self._camera_status.setText(f"状态：运行中，识别不可用（{self._camera_service.last_error}）")
+            self._set_camera_status(f"状态：运行中，识别不可用（{self._camera_service.last_error}）")
         else:
-            self._camera_status.setText("状态：运行中")
+            self._set_camera_status("状态：运行中")
         self._log_line("摄像头已启动")
 
     def _stop_camera(self) -> None:
@@ -2474,7 +2582,7 @@ class MainWindow(QMainWindow):
         self._camera_service = None
         self._camera_toggle_btn.setText("启动摄像头")
         self._camera_index_spin.setEnabled(True)
-        self._camera_status.setText("状态：未启动")
+        self._set_camera_status("状态：未启动")
         self._teleop_last_pose = None
         if self._teleop_check.isChecked():
             self._update_teleop_status("遥控：等待摄像头", ok=False)
@@ -2490,7 +2598,7 @@ class MainWindow(QMainWindow):
         self._rps_panel.on_frame(bgr, detection)
         self._handle_teleop_frame(detection)
         if self._camera_service is not None and self._camera_service.last_error:
-            self._camera_status.setText(f"状态：运行中，识别异常（{self._camera_service.last_error}）")
+            self._set_camera_status(f"状态：运行中，识别异常（{self._camera_service.last_error}）")
             if "MediaPipe" in self._camera_service.last_error:
                 self._refresh_mediapipe_status(self._camera_service.last_error)
 

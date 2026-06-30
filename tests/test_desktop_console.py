@@ -137,6 +137,28 @@ def test_main_window_moves_manual_control_to_left_and_removes_right_manual_tab(t
     window.deleteLater()
 
 
+def test_main_window_imports_official_hand_dance_txt(tmp_path) -> None:
+    _app()
+    source_dir = tmp_path / "hand_dance"
+    source_dir.mkdir()
+    (source_dir / "OK.txt").write_text(
+        "0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1000\n"
+        "0\t113\t0\t0\t0\t123\t84\t0\t0\t0\t130\t0\t0\t0\t0\t96\t1000\n",
+        encoding="utf-8",
+    )
+    window = MainWindow(config_path=tmp_path / "config.json")
+    window._actions_path = tmp_path / "actions.json"
+    window._actions = []
+
+    imported = window._import_demo_actions(source_dir)
+
+    assert [action.name for action in imported] == ["ok"]
+    assert window._actions_path.exists()
+    assert "ok" in window._actions_path.read_text(encoding="utf-8")
+    window.close()
+    window.deleteLater()
+
+
 def test_main_window_reads_state_in_background(tmp_path) -> None:
     _app()
     window = MainWindow(config_path=tmp_path / "config.json")

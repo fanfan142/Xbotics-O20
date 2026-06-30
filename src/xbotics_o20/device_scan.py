@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import ctypes
-import grp
 import importlib
 import importlib.util
 import os
-import pwd
 import shutil
 import stat
 import subprocess
@@ -15,6 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from .native_libs import ensure_canfd_native_libraries
+
+try:
+    import grp
+    import pwd
+except ModuleNotFoundError:  # pragma: no cover - Windows compatibility
+    grp = None
+    pwd = None
+
 
 @dataclass(frozen=True)
 class ScanReport:
@@ -89,14 +95,20 @@ def scan_sys_usb() -> list[dict[str, str]]:
         permission_info: dict[str, str] = {}
         if dev_path is not None and dev_path.exists():
             st = dev_path.stat()
-            try:
-                owner = pwd.getpwuid(st.st_uid).pw_name
-            except KeyError:
+            if pwd is None:
                 owner = str(st.st_uid)
-            try:
-                group = grp.getgrgid(st.st_gid).gr_name
-            except KeyError:
+            else:
+                try:
+                    owner = pwd.getpwuid(st.st_uid).pw_name
+                except KeyError:
+                    owner = str(st.st_uid)
+            if grp is None:
                 group = str(st.st_gid)
+            else:
+                try:
+                    group = grp.getgrgid(st.st_gid).gr_name
+                except KeyError:
+                    group = str(st.st_gid)
             permission_info = {
                 "dev_path": str(dev_path),
                 "mode": stat.filemode(st.st_mode),

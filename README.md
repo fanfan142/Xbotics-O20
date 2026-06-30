@@ -20,6 +20,8 @@ python "run_console.py"
 - ROS2节点模式：连接已经启动的官方 ROS2 节点，适合需要接入 ROS2 工作流的场景。
 - 虚拟模式：不连接硬件，用于离线查看界面、动作库和数字孪生。
 
+顶部“导入官方动作”会优先读取相邻目录 `../code/O20_hand_ui_canfd_release_2026_04_27/hand_dance`，把官方简易 Windows UI 的 hand_dance txt 动作导入当前动作库。
+
 ## 目录结构
 
 ```text
@@ -80,6 +82,8 @@ PYTHONPATH="../xbotics_o20/src:${PYTHONPATH:-}" python -m xbotics_o20 scan --ros
 ## 实物连接
 
 不需要为控制台全量安装 `../linkerhand-o20-ros2/requirements.txt`。那份依赖包含仿真和训练包，Python 3.13 下可能卡在 `dm_control/labmaze/bazel`，和直连模式无关。
+
+当前控制台在 Windows 下可以启动、使用虚拟模式、导入官方动作和编辑动作库。直连控制 O20 仍走官方 ROS2 SDK 的 `libcanbus.so/libusb-1.0.so` 路线，主要面向 Ubuntu/ROS2 环境；官方 Windows 简易 UI 随包带的 `HCanbus.dll` 已可被诊断到，但还没有接入为本控制台的 Windows 直连后端。Windows 上要直接控实物，暂时优先使用官方 `O20_hand_ui.exe`；本控制台直连实物建议在 Ubuntu/WSL 外接 USB-CANFD 可用环境中验证。
 
 先做只读扫描：
 

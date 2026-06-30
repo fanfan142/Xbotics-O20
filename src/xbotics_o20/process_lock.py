@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-import fcntl
 from pathlib import Path
 
 from .config import PROJECT_ROOT
+
+try:
+    import fcntl
+except ModuleNotFoundError:  # pragma: no cover - Windows compatibility
+    fcntl = None
+
+try:
+    import msvcrt
+except ModuleNotFoundError:  # pragma: no cover - POSIX compatibility
+    msvcrt = None
 
 
 class CanfdProcessLock:
@@ -16,8 +25,12 @@ class CanfdProcessLock:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._file = self.path.open("w", encoding="utf-8")
         try:
-            fcntl.flock(self._file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            if fcntl is not None:
+                fcntl.flock(self._file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            elif msvcrt is not None:
+                self._file.seek(0)
+                msvcrt.locking(self._file.fileno(), msvcrt.LK_NBLCK, 1)
+        except (BlockingIOError, OSError):
             self._file.close()
             self._file = None
             return False
@@ -29,7 +42,11 @@ class CanfdProcessLock:
         if self._file is None:
             return
         try:
-            fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
+            if fcntl is not None:
+                fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                self._file.seek(0)
+                msvcrt.locking(self._file.fileno(), msvcrt.LK_UNLCK, 1)
         finally:
             self._file.close()
             self._file = None
