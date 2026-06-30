@@ -87,6 +87,9 @@ QWidget {
     color: #0f172a;
     font-size: 13px;
 }
+QWidget#Transparent {
+    background: transparent;
+}
 QFrame#Card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -760,6 +763,11 @@ class JointEditor(QWidget):
         if emit:
             self.changed.emit(self.positions())
 
+    def set_read_only(self, read_only: bool) -> None:
+        enabled = not read_only
+        for widget in (*self._sliders, *self._spins):
+            widget.setEnabled(enabled)
+
     def _slider_changed(self, index: int, value: int) -> None:
         if self._updating:
             return
@@ -927,7 +935,7 @@ class UrdfTwinPanel(QFrame):
         html = self._render_html()
         if html is None:
             self._status.setText("URDF 资源缺失")
-            fallback = QLabel("未找到 action_generate_yx 的 URDF/STL 资源。")
+            fallback = QLabel("未找到 URDF/STL 资源，请检查 resources/urdf/model。")
             fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
             fallback.setStyleSheet("background: #eef3f7; border: 1px solid #d6e0ea; border-radius: 8px; color: #657385;")
             layout.addWidget(fallback, 1)
@@ -939,7 +947,7 @@ class UrdfTwinPanel(QFrame):
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
         self._web.loadFinished.connect(self._on_loaded)
-        self._web.setHtml(html, QUrl.fromLocalFile(str((PROJECT_ROOT.parent / "action_generate_yx" / "web").resolve()) + "/"))
+        self._web.setHtml(html, QUrl.fromLocalFile(str(resolve_project_path("resources/urdf").resolve()) + "/"))
         layout.addWidget(self._web, 1)
 
     def set_positions(self, values: list[float]) -> None:
@@ -972,16 +980,9 @@ class UrdfTwinPanel(QFrame):
             self._status.setText(f"已加载 | {_side_label(self._side)}")
 
     def _render_html(self) -> str | None:
-        root = PROJECT_ROOT.parent / "action_generate_yx"
-        web_dir = root / "web"
-        urdf_path = root / "urdf" / "R20-URDF-right" / "urdf" / "R20V10.6(完整)-jian24.urdf"
-        mesh_dir = root / "urdf" / "R20-URDF-right" / "meshes"
-        script_path = web_dir / "urdf_viewer.js"
-        if not (urdf_path.exists() and mesh_dir.exists() and script_path.exists()):
-            dist = root / "dist" / "linkerhand_life_o20_full_portable_20260511"
-            urdf_path = dist / "urdf" / "R20-URDF-right" / "urdf" / "R20V10.6(完整)-jian24.urdf"
-            mesh_dir = dist / "urdf" / "R20-URDF-right" / "meshes"
-            script_path = dist / "web" / "urdf_viewer.js"
+        urdf_path = resolve_project_path("resources/urdf/model/urdf/R20V10.6(完整)-jian24.urdf")
+        mesh_dir = resolve_project_path("resources/urdf/model/meshes")
+        script_path = resolve_project_path("resources/urdf/urdf_viewer.js")
         if not (urdf_path.exists() and mesh_dir.exists() and script_path.exists()):
             return None
         urdf_text = urdf_path.read_text(encoding="utf-8", errors="ignore")
@@ -1040,10 +1041,15 @@ class UrdfTwinPanel(QFrame):
 	    }};
 	    async function boot() {{
 	      try {{
-	        viewer = new O20UrdfViewer(document.getElementById("canvas"), {{ autoRotate: false, rootPitch: 0, side: latestSide }});
-	        viewer.distance = 0.68;
-	        viewer.yaw = -0.55;
-	        viewer.pitch = 0.34;
+	        viewer = new O20UrdfViewer(document.getElementById("canvas"), {{
+	          autoRotate: false,
+	          rootPitch: 0,
+	          side: latestSide,
+	          yaw: -0.55,
+	          leftYaw: 2.59,
+	          pitch: 0.34,
+	          distance: 0.68
+	        }});
         viewer.target = [0, 0, 0.045];
         await viewer.load();
 	        viewer.setJointPositions(latestPositions);
@@ -1335,7 +1341,7 @@ class SettingsDialog(QDialog):
         self._speed.setValue(config.o20.default_speed)
         conn.addRow("连接方式", self._backend)
         conn.addRow("手型", self._side)
-        conn.addRow("SDK 路径", self._sdk_root)
+        conn.addRow("扩展路径", self._sdk_root)
         conn.addRow("CANFD 设备号", self._device)
         conn.addRow("默认速度", self._speed)
         layout.addLayout(conn)
@@ -1409,7 +1415,7 @@ class SettingsDialog(QDialog):
         config = copy.deepcopy(self._config)
         config.o20.backend = _combo_value(self._backend)
         config.o20.side = _combo_value(self._side)
-        config.o20.sdk_root = self._sdk_root.text().strip() or "../linkerhand-o20-ros2"
+        config.o20.sdk_root = self._sdk_root.text().strip()
         config.o20.canfd_device = self._device.value()
         config.o20.default_speed = self._speed.value()
         config.safety.clamp_positions = self._clamp.isChecked()
@@ -1487,6 +1493,7 @@ class CameraPreviewPanel(QFrame):
 
     def on_camera_stopped(self) -> None:
         self._gesture.setText("手势：--")
+        self._image.clear()
         self._image.setText("<center><span style='color:#6b7280'>摄像头未启动</span></center>")
         self._status.setText("识别状态：等待摄像头")
         self._last_frame_at = 0.0
@@ -1556,6 +1563,7 @@ class RPSPanel(QFrame):
 
     def on_camera_stopped(self) -> None:
         self._latest_frame_detection = None
+        self._image.clear()
         self._image.setText("<center><span style='color:#6b7280'>摄像头未启动</span></center>")
         self._detected.setText("检测到手势：--")
         self._stop_game()
@@ -1807,7 +1815,11 @@ class MainWindow(QMainWindow):
         self._manual_live_check.stateChanged.connect(self._on_manual_live_toggle)
         for button in (self._home_btn, self._send_pose_btn, self._copy20_btn, self._save_pose_btn, self._manual_live_check):
             controls_layout.addWidget(button)
+        self._manual_mode_label = QLabel("滑块控制")
+        self._manual_mode_label.setObjectName("StatusOk")
+        self._manual_mode_label.setToolTip("当前滑块可直接编辑目标姿态")
         controls_layout.addStretch(1)
+        controls_layout.addWidget(self._manual_mode_label)
         layout.addWidget(controls)
 
         scroll = QScrollArea()
@@ -1816,50 +1828,73 @@ class MainWindow(QMainWindow):
         self._joint_editor.changed.connect(self._on_joint_editor_changed)
         scroll.setWidget(self._joint_editor)
         layout.addWidget(scroll, 1)
+        self._update_manual_editor_mode()
         return tab
 
     def _build_camera_bar(self) -> QWidget:
         camera_bar, camera_layout = _card()
         camera_bar.setObjectName("CameraBar")
-        camera_bar.setMinimumHeight(64)
-        camera_layout.setDirection(QBoxLayout.Direction.LeftToRight)
-        camera_layout.setSpacing(8)
-        camera_layout.addWidget(QLabel("摄像头"))
+        camera_bar.setMinimumHeight(96)
+        camera_layout.setSpacing(6)
+
+        controls = QWidget()
+        controls.setObjectName("Transparent")
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(8)
+        controls_layout.addWidget(QLabel("摄像头"))
         self._camera_index_spin = QSpinBox()
         self._camera_index_spin.setRange(0, 16)
         self._camera_index_spin.setValue(self._config.camera.camera_index)
-        camera_layout.addWidget(self._camera_index_spin)
+        controls_layout.addWidget(self._camera_index_spin)
         self._mirror_check = QCheckBox("镜像")
         self._mirror_check.setChecked(self._config.camera.mirror)
         self._mirror_check.stateChanged.connect(self._on_mirror_changed)
-        camera_layout.addWidget(self._mirror_check)
+        controls_layout.addWidget(self._mirror_check)
         self._teleop_check = QCheckBox("手势遥控")
         self._teleop_check.stateChanged.connect(self._on_teleop_toggle)
-        camera_layout.addWidget(self._teleop_check)
-        camera_layout.addWidget(QLabel("遥控频率"))
+        controls_layout.addWidget(self._teleop_check)
+        controls_layout.addWidget(QLabel("遥控频率"))
         self._teleop_rate_spin = QSpinBox()
         self._teleop_rate_spin.setRange(2, 20)
         self._teleop_rate_spin.setValue(10)
-        camera_layout.addWidget(self._teleop_rate_spin)
+        controls_layout.addWidget(self._teleop_rate_spin)
         self._camera_toggle_btn = QPushButton("启动摄像头")
         self._camera_toggle_btn.setObjectName("Primary")
         self._camera_toggle_btn.setMinimumWidth(108)
         self._camera_toggle_btn.clicked.connect(self._toggle_camera)
-        camera_layout.addWidget(self._camera_toggle_btn)
+        controls_layout.addWidget(self._camera_toggle_btn)
+        controls_layout.addStretch(1)
+        camera_layout.addWidget(controls)
+
+        status_row = QWidget()
+        status_row.setObjectName("Transparent")
+        status_layout = QGridLayout(status_row)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setHorizontalSpacing(12)
+        status_layout.setVerticalSpacing(0)
+        status_layout.setColumnStretch(5, 1)
         self._camera_status = QLabel("未启动")
         self._camera_status.setObjectName("Subtle")
-        self._camera_status.setMinimumWidth(64)
+        self._camera_status.setMinimumWidth(92)
         self._camera_status.setToolTip("状态：未启动")
-        camera_layout.addWidget(self._camera_status)
         self._teleop_status = QLabel("遥控关")
         self._teleop_status.setObjectName("Subtle")
-        self._teleop_status.setMinimumWidth(72)
+        self._teleop_status.setMinimumWidth(110)
         self._teleop_status.setToolTip("遥控：关闭")
-        camera_layout.addWidget(self._teleop_status)
         self._mediapipe_status = QLabel()
-        self._mediapipe_status.setMinimumWidth(78)
+        self._mediapipe_status.setMinimumWidth(124)
         self._refresh_mediapipe_status()
-        camera_layout.addWidget(self._mediapipe_status)
+        for label in (self._camera_status, self._teleop_status, self._mediapipe_status):
+            label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        status_layout.addWidget(QLabel("摄像头状态"), 0, 0)
+        status_layout.addWidget(self._camera_status, 0, 1)
+        status_layout.addWidget(QLabel("遥控状态"), 0, 2)
+        status_layout.addWidget(self._teleop_status, 0, 3)
+        status_layout.addWidget(QLabel("识别状态"), 0, 4)
+        status_layout.addWidget(self._mediapipe_status, 0, 5)
+        camera_layout.addWidget(status_row)
         return camera_bar
 
     def _load_actions(self) -> None:
@@ -1986,6 +2021,7 @@ class MainWindow(QMainWindow):
         self._connect_btn.setEnabled(True)
         self._connect_btn.setText("连接")
         self._set_backend_status("未连接", ok=True)
+        self._update_manual_editor_mode()
         if log:
             self._log_line("设备已断开")
         return True
@@ -2023,7 +2059,7 @@ class MainWindow(QMainWindow):
 
         self._action_task = ActionTask(do_it)
         self._action_task.progress.connect(self._action_panel.update_progress)
-        self._action_task.frame_sent.connect(self._apply_positions_to_visual)
+        self._action_task.frame_sent.connect(lambda positions: self._set_display_pose(positions, sync_editor=True))
         self._action_task.finished_text.connect(self._on_action_done)
         self._action_task.failed.connect(self._on_action_failed)
         self._action_task.start()
@@ -2070,7 +2106,7 @@ class MainWindow(QMainWindow):
             return message if ok else f"宏失败：{message}"
 
         self._action_task = ActionTask(do_it)
-        self._action_task.frame_sent.connect(self._apply_positions_to_visual)
+        self._action_task.frame_sent.connect(lambda positions: self._set_display_pose(positions, sync_editor=True))
         self._action_task.finished_text.connect(self._on_action_done)
         self._action_task.failed.connect(self._on_action_failed)
         self._action_task.start()
@@ -2148,15 +2184,14 @@ class MainWindow(QMainWindow):
         self._action_panel.set_enabled(enabled)
         self._macro_panel.set_enabled(enabled)
         self._macro_btn.setEnabled(enabled)
-        self._send_pose_btn.setEnabled(enabled)
-        self._save_pose_btn.setEnabled(enabled)
-        self._manual_live_check.setEnabled(enabled)
+        self._update_manual_editor_mode()
 
     def _claim_control_source(self, source: str, label: str, *, transient: bool = False) -> bool:
         if self._control_source in {"idle", source}:
             if not transient:
                 self._control_source = source
                 self._control_source_label = label
+                self._update_manual_editor_mode()
             return True
         self._info_panel.set_status(f"当前由{self._control_source_label}控制，请先停止或关闭该模式", ok=False)
         return False
@@ -2166,6 +2201,26 @@ class MainWindow(QMainWindow):
             return
         self._control_source = "idle"
         self._control_source_label = "空闲"
+        self._update_manual_editor_mode()
+
+    def _manual_editor_is_read_only(self) -> bool:
+        task_running = self._action_task is not None and self._action_task.isRunning()
+        return self._control_source in {"teleop", "action", "macro"} or task_running
+
+    def _update_manual_editor_mode(self) -> None:
+        if not hasattr(self, "_joint_editor"):
+            return
+        read_only = self._manual_editor_is_read_only()
+        self._joint_editor.set_read_only(read_only)
+        for button_name in ("_home_btn", "_send_pose_btn", "_save_pose_btn", "_manual_live_check"):
+            if hasattr(self, button_name):
+                getattr(self, button_name).setEnabled(not read_only)
+        if hasattr(self, "_manual_mode_label"):
+            self._manual_mode_label.setText("实时读数" if read_only else "滑块控制")
+            self._manual_mode_label.setToolTip("滑块正在跟随当前控制源回读姿态" if read_only else "当前滑块可直接编辑目标姿态")
+            self._manual_mode_label.setObjectName("Subtle" if read_only else "StatusOk")
+            self._manual_mode_label.style().unpolish(self._manual_mode_label)
+            self._manual_mode_label.style().polish(self._manual_mode_label)
 
     def _check_send_safety(self, source_label: str) -> bool:
         if self._latest_state is None:
@@ -2210,7 +2265,7 @@ class MainWindow(QMainWindow):
         speed: int | None = None,
         transient: bool = False,
         update_visual: bool = True,
-        sync_editor: bool = False,
+        sync_editor: bool = True,
         refresh_after: bool = False,
     ) -> tuple[bool, list[float]]:
         if self._backend is None or not self._backend.is_connected:
@@ -2232,9 +2287,7 @@ class MainWindow(QMainWindow):
         if ok:
             self._last_sent_positions = list(target)
             if update_visual:
-                self._apply_positions_to_visual(target)
-            if sync_editor:
-                self._sync_joint_editor_positions(target)
+                self._set_display_pose(target, sync_editor=sync_editor)
             if refresh_after:
                 self._refresh_state()
         else:
@@ -2262,9 +2315,10 @@ class MainWindow(QMainWindow):
         else:
             self._release_control_source("manual_live")
             self._log_line("手动实时已关闭")
+        self._update_manual_editor_mode()
 
     def _on_joint_editor_changed(self, positions: list[float]) -> None:
-        self._apply_positions_to_visual(positions)
+        self._set_display_pose(positions, sync_editor=False)
         if self._syncing_joint_editor:
             return
         if not self._manual_live_check.isChecked():
@@ -2368,6 +2422,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_public20_text"):
             self._public20_text.setPlainText(json.dumps(motor17_to_public20(clamped), ensure_ascii=False))
 
+    def _set_display_pose(self, positions: list[float], *, sync_editor: bool = True) -> list[float]:
+        clamped = clamp_positions(positions)
+        self._apply_positions_to_visual(clamped)
+        if sync_editor:
+            self._sync_joint_editor_positions(clamped)
+        return clamped
+
     def _sync_joint_editor_positions(self, positions: list[float]) -> None:
         if not hasattr(self, "_joint_editor"):
             return
@@ -2398,8 +2459,7 @@ class MainWindow(QMainWindow):
         if state.connected:
             self._set_backend_status(f"已连接：{_backend_label(state.backend)} / {_side_label(state.side)}", ok=True)
             self._last_sent_positions = clamp_positions(state.positions)
-        self._apply_positions_to_visual(state.positions)
-        self._sync_joint_editor_positions(state.positions)
+        self._set_display_pose(state.positions, sync_editor=True)
 
     def _on_state_failed(self, text: str) -> None:
         self._info_panel.set_status(f"状态读取失败：{text}", ok=False)
@@ -2509,6 +2569,7 @@ class MainWindow(QMainWindow):
                     self._teleop_check.setChecked(False)
                 finally:
                     self._teleop_check.blockSignals(was_blocked)
+                self._update_manual_editor_mode()
                 return
             self._update_teleop_status("遥控：等待手部识别", ok=True)
             self._log_line("手势遥控已开启")
@@ -2516,6 +2577,7 @@ class MainWindow(QMainWindow):
             self._release_control_source("teleop")
             self._update_teleop_status("遥控：关闭", ok=True)
             self._log_line("手势遥控已关闭")
+        self._update_manual_editor_mode()
 
     def _update_teleop_status(self, text: str, *, ok: bool) -> None:
         if text == self._teleop_last_status:

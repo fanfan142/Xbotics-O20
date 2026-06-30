@@ -4,7 +4,7 @@
     "side": "left",
     "backend": "mock",
     "canfd_device": 0,
-    "sdk_root": "../linkerhand-o20-ros2",
+    "sdk_root": "",
     "start_monitoring": true,
     "calibrate_on_connect": false,
     "default_speed": 60

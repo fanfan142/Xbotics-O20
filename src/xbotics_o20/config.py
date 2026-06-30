@@ -48,7 +48,7 @@ class O20Config:
     side: str = "left"
     backend: str = "direct"
     canfd_device: int = 0
-    sdk_root: str = "../linkerhand-o20-ros2"
+    sdk_root: str = ""
     start_monitoring: bool = True
     calibrate_on_connect: bool = False
     default_speed: int = 60

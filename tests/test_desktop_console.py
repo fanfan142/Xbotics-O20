@@ -65,6 +65,24 @@ def test_joint_editor_user_update_can_emit_changed() -> None:
     editor.deleteLater()
 
 
+def test_joint_editor_read_only_blocks_user_controls_but_keeps_sync() -> None:
+    _app()
+    editor = JointEditor()
+    positions = list(HOME_POSITIONS)
+    positions[5] = 44
+
+    editor.set_read_only(True)
+    editor.set_positions(positions, emit=False)
+
+    assert editor.positions()[5] == 44
+    assert all(not slider.isEnabled() for slider in editor._sliders)
+    assert all(not spin.isEnabled() for spin in editor._spins)
+    editor.set_read_only(False)
+    assert all(slider.isEnabled() for slider in editor._sliders)
+    assert all(spin.isEnabled() for spin in editor._spins)
+    editor.deleteLater()
+
+
 def test_info_panel_shows_all_joint_telemetry() -> None:
     _app()
     panel = InfoPanel()
@@ -109,6 +127,7 @@ def test_urdf_twin_html_exposes_side_sync() -> None:
     assert html is not None
     assert "window.setO20Side" in html
     assert "side: latestSide" in html
+    assert "leftYaw: 2.59" in html
     assert 'let latestSide = "left";' in html
     panel.deleteLater()
 
@@ -310,6 +329,26 @@ def test_safe_send_limits_large_steps_before_sending(tmp_path) -> None:
     assert sent[5] == 45
     assert backend.sent[-1][0][5] == 45
     assert backend.sent[-1][1] == 77
+    assert window._joint_editor.positions()[5] == 45
+    window.close()
+    window.deleteLater()
+
+
+def test_display_pose_can_sync_or_leave_editor_unchanged(tmp_path) -> None:
+    _app()
+    window = MainWindow(config_path=tmp_path / "config.json")
+    positions = list(HOME_POSITIONS)
+    positions[5] = 31
+    other = list(HOME_POSITIONS)
+    other[5] = 62
+
+    window._set_display_pose(positions, sync_editor=True)
+    assert window._joint_editor.positions()[5] == 31
+    assert window._twin._positions[5] == 31
+
+    window._set_display_pose(other, sync_editor=False)
+    assert window._joint_editor.positions()[5] == 31
+    assert window._twin._positions[5] == 62
     window.close()
     window.deleteLater()
 
@@ -324,5 +363,29 @@ def test_manual_live_and_teleop_are_mutually_exclusive(tmp_path) -> None:
     assert window._manual_live_check.isChecked() is False
     assert window._teleop_check.isChecked() is True
     assert window._control_source == "teleop"
+    assert window._manual_mode_label.text() == "实时读数"
+    assert all(not slider.isEnabled() for slider in window._joint_editor._sliders)
+
+    window._teleop_check.setChecked(False)
+    assert window._control_source == "idle"
+    assert window._manual_mode_label.text() == "滑块控制"
+    assert all(slider.isEnabled() for slider in window._joint_editor._sliders)
+    window.close()
+    window.deleteLater()
+
+
+def test_action_control_source_makes_manual_editor_read_only(tmp_path) -> None:
+    _app()
+    window = MainWindow(config_path=tmp_path / "config.json")
+
+    assert window._claim_control_source("action", "预设手势") is True
+    assert window._manual_mode_label.text() == "实时读数"
+    assert window._send_pose_btn.isEnabled() is False
+    assert all(not slider.isEnabled() for slider in window._joint_editor._sliders)
+
+    window._release_control_source("action")
+    assert window._manual_mode_label.text() == "滑块控制"
+    assert window._send_pose_btn.isEnabled() is True
+    assert all(slider.isEnabled() for slider in window._joint_editor._sliders)
     window.close()
     window.deleteLater()

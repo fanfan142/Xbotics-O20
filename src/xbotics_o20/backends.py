@@ -289,7 +289,7 @@ class DirectO20Backend:
                     ok = bool(self._controller.set_joint_positions(target))
                 self._append_sdk_log(sdk_output.getvalue())
                 if not ok:
-                    self._error = "SDK set_joint_positions 返回 False"
+                    self._error = "关节位置发送接口返回 False"
                 return ok
             except Exception as exc:
                 self._error = str(exc)
