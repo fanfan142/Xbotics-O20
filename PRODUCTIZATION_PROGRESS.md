@@ -7,13 +7,15 @@
 - 桌面控制台使用 PySide6，入口为 `python run_console.py`。
 - 仓库内包含默认动作库、手部识别模型、Windows 直连运行文件、URDF/STL 模型和预览图。
 - 默认配置不依赖仓库外固定目录；如需外部运行组件，通过设置页“扩展路径”显式配置。
-- `main` 已同步远端；本轮真机安全审计修复完成后发布 `v0.1.1`。
+- `main` 已同步远端；本轮真机安全审计修复完成后发布 `v0.1.2`。
 
 ## 已完成的产品化能力
 
 - 左侧实时读取、16 路手动滑块、URDF 模型、二维姿态视图和 20 位姿态数据同步。
 - 手动实时、手势遥控、动作播放和宏执行互斥，避免多个控制源同时发送。
 - 手势遥控开启时滑块切换为实时读数；关闭后恢复滑块控制。
+- 默认回初始采用中性侧摆姿态，MediaPipe 侧摆围绕各关节中性值映射。
+- 避让姿态保护保留为显式开关，默认不压住食指和小指侧摆。
 - 动作播放从当前实物读数开始限步，动作循环边界也限步。
 - 停止/失败后的回初始按当前读数分步执行。
 - CLI `pose` 单帧发送走同一套读数、安全检查和最大步长拆分。
@@ -29,7 +31,7 @@
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src QT_QPA_PLATFORM=offscreen python -m pytest -q -p no:cacheprovider tests
 ```
 
-结果：`62 passed`
+结果：`68 passed`
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python -m compileall -q src tests

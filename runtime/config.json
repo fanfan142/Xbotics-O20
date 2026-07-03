@@ -13,7 +13,7 @@
     "clamp_positions": true,
     "max_step_per_frame": 45.0,
     "min_frame_dt_s": 0.04,
-    "puppet_safe_mode": true,
+    "puppet_safe_mode": false,
     "current_protection_enabled": true,
     "max_current_ma": 1200.0,
     "temperature_protection_enabled": true,

@@ -17,20 +17,20 @@ class JointDefinition:
 
 
 JOINTS: tuple[JointDefinition, ...] = (
-    JointDefinition(0, "thumb_mcp", "拇指指根", "麦克风道具", 0, 120, 58),
-    JointDefinition(1, "thumb_ip", "拇指指尖", "麦克风道具", 0, 150, 80),
-    JointDefinition(2, "thumb_abd", "拇指侧摆", "麦克风道具", 0, 180, 160),
-    JointDefinition(3, "thumb_cmc", "拇指旋转", "麦克风道具", 0, 130, 64),
-    JointDefinition(4, "index_abd", "食指侧摆", "玩偶左手", -30, 30, -30),
+    JointDefinition(0, "thumb_mcp", "拇指指根", "麦克风道具", 0, 120, 0),
+    JointDefinition(1, "thumb_ip", "拇指指尖", "麦克风道具", 0, 150, 0),
+    JointDefinition(2, "thumb_abd", "拇指侧摆", "麦克风道具", 0, 180, 0),
+    JointDefinition(3, "thumb_cmc", "拇指旋转", "麦克风道具", 0, 130, 125),
+    JointDefinition(4, "index_abd", "食指侧摆", "玩偶左手", -30, 30, 15),
     JointDefinition(5, "index_mcp", "食指指根", "玩偶左手", 0, 180, 0),
     JointDefinition(6, "index_pip", "食指指尖", "玩偶左手", 0, 180, 0),
-    JointDefinition(7, "middle_abd", "中指侧摆", "玩偶头部", -30, 30, 0),
+    JointDefinition(7, "middle_abd", "中指侧摆", "玩偶头部", -30, 30, 5),
     JointDefinition(8, "middle_mcp", "中指指根", "玩偶头部", 0, 180, 0),
     JointDefinition(9, "middle_pip", "中指指尖", "玩偶头部", 0, 180, 0),
-    JointDefinition(10, "ring_abd", "无名指侧摆", "玩偶头部", -20, 20, 0),
+    JointDefinition(10, "ring_abd", "无名指侧摆", "玩偶头部", -20, 20, -4),
     JointDefinition(11, "ring_mcp", "无名指指根", "玩偶头部", 0, 180, 0),
     JointDefinition(12, "ring_pip", "无名指指尖", "玩偶头部", 0, 180, 0),
-    JointDefinition(13, "pinky_abd", "小指侧摆", "玩偶右手", -20, 20, -20),
+    JointDefinition(13, "pinky_abd", "小指侧摆", "玩偶右手", -20, 20, -13),
     JointDefinition(14, "pinky_mcp", "小指指根", "玩偶右手", 0, 180, 0),
     JointDefinition(15, "pinky_pip", "小指指尖", "玩偶右手", 0, 180, 0),
 )

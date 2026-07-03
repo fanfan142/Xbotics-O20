@@ -59,7 +59,7 @@ class SafetyConfig:
     clamp_positions: bool = True
     max_step_per_frame: float = 45.0
     min_frame_dt_s: float = 0.04
-    puppet_safe_mode: bool = True
+    puppet_safe_mode: bool = False
     current_protection_enabled: bool = True
     max_current_ma: float = 1200.0
     temperature_protection_enabled: bool = True

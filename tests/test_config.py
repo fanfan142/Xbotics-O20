@@ -48,6 +48,18 @@ def test_config_normalizes_bad_values():
     assert config.camera.mirror is False
 
 
+def test_default_config_leaves_abduction_space_unlocked():
+    config = app_config_from_dict({})
+
+    assert config.safety.puppet_safe_mode is False
+
+
+def test_config_can_enable_puppet_safe_mode_explicitly():
+    config = app_config_from_dict({"safety": {"puppet_safe_mode": "true"}})
+
+    assert config.safety.puppet_safe_mode is True
+
+
 def test_load_app_config_backs_up_invalid_json(tmp_path):
     path = tmp_path / "config.json"
     path.write_text("{bad json", encoding="utf-8")

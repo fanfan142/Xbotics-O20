@@ -66,6 +66,10 @@ def test_teleop_maps_finger_splay_to_abduction_joints() -> None:
     neutral = landmarks_to_o20_positions(_spread_hand(), smoothing=1.0)
     spread = landmarks_to_o20_positions(_spread_hand(index_pip_x=-0.78, pinky_pip_x=0.78), smoothing=1.0)
 
+    assert neutral.positions[4] == HOME_POSITIONS[4]
+    assert neutral.positions[7] == HOME_POSITIONS[7]
+    assert neutral.positions[10] == HOME_POSITIONS[10]
+    assert neutral.positions[13] == HOME_POSITIONS[13]
     assert spread.positions[4] < neutral.positions[4]
     assert spread.positions[13] < neutral.positions[13]
     assert JOINTS[4].min_value <= spread.positions[4] <= JOINTS[4].max_value

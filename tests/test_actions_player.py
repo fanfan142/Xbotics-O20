@@ -9,6 +9,7 @@ from xbotics_o20.actions import (
     load_actions,
     load_demo_txt_action,
     validate_actions_payload,
+    normalize_action,
 )
 from xbotics_o20.backends import MockO20Backend, O20DeviceState
 from xbotics_o20.config import SafetyConfig
@@ -254,6 +255,36 @@ def test_default_action_payload_uses_16_joint_frames():
     for action in default_actions_payload():
         for frame in action["frames"]:
             assert len(frame["positions"]) == JOINT_COUNT
+
+
+def test_normalize_action_defaults_to_unlocked_abduction_space():
+    action = normalize_action(
+        {
+            "name": "test",
+            "title": "测试",
+            "category": "preset",
+            "frames": [{"positions": [0] * JOINT_COUNT, "speed": 60, "hold_sec": 0.18}],
+        }
+    )
+
+    assert action.frames[0].positions[4] == 0
+    assert action.frames[0].positions[13] == 0
+
+
+def test_normalize_action_can_apply_puppet_safe_mode_explicitly():
+    action = normalize_action(
+        {
+            "name": "test",
+            "title": "测试",
+            "category": "preset",
+            "frames": [{"positions": [0] * JOINT_COUNT, "speed": 60, "hold_sec": 0.18}],
+        },
+        puppet_safe_mode=True,
+    )
+
+    safe_frame = action.frames[1]
+    assert safe_frame.positions[4] == -30
+    assert safe_frame.positions[13] == -20
 
 
 def test_validate_actions_payload_accepts_runtime_library():

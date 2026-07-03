@@ -142,8 +142,8 @@ def _finger_splay_angle(landmarks: Sequence[Any], mcp: int, pip: int, basis) -> 
 def _joint_from_splay(index: int, angle: float, flexion: float, *, invert: bool = False) -> float:
     signed = -angle if invert else angle
     joint = JOINTS[index]
-    raw = max(joint.min_value, min(joint.max_value, signed * 2.4))
-    damped = _lerp(raw, 0.0, max(0.0, min(0.65, flexion * 0.65)))
+    raw = max(joint.min_value, min(joint.max_value, joint.home + signed * 2.4))
+    damped = _lerp(raw, joint.home, max(0.0, min(0.65, flexion * 0.65)))
     return max(joint.min_value, min(joint.max_value, damped))
 
 

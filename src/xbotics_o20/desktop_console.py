@@ -1349,7 +1349,7 @@ class SettingsDialog(QDialog):
         safety = QFormLayout()
         self._clamp = QCheckBox("启用逐帧步长保护")
         self._clamp.setChecked(config.safety.clamp_positions)
-        self._puppet_safe = QCheckBox("启用安全姿态保护")
+        self._puppet_safe = QCheckBox("启用避让姿态保护")
         self._puppet_safe.setChecked(config.safety.puppet_safe_mode)
         self._max_step = QDoubleSpinBox()
         self._max_step.setRange(1.0, 1000.0)

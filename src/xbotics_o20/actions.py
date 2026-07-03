@@ -90,7 +90,7 @@ def _safe_speed(value: Any) -> int:
     return max(0, min(130, speed))
 
 
-def _normalize_frame(frame: dict[str, Any], *, puppet_safe_mode: bool = True) -> ActionFrame:
+def _normalize_frame(frame: dict[str, Any], *, puppet_safe_mode: bool = False) -> ActionFrame:
     positions = frame.get("positions", HOME_POSITIONS)
     if puppet_safe_mode:
         normalized_positions = keep_puppet_pose_safe(positions)
@@ -111,7 +111,7 @@ def _is_home_frame(frame: ActionFrame) -> bool:
     return all(abs(value - home) < 1e-6 for value, home in zip(frame.positions, HOME_POSITIONS))
 
 
-def normalize_action(payload: dict[str, Any], *, puppet_safe_mode: bool = True) -> ActionDefinition:
+def normalize_action(payload: dict[str, Any], *, puppet_safe_mode: bool = False) -> ActionDefinition:
     name = str(payload.get("name") or "unnamed").strip().lower().replace(" ", "_")
     if not name:
         name = "unnamed"
@@ -156,7 +156,7 @@ def action_to_dict(action: ActionDefinition) -> dict[str, Any]:
     }
 
 
-def load_actions(path: Path = DEFAULT_ACTIONS_PATH, *, puppet_safe_mode: bool = True) -> list[ActionDefinition]:
+def load_actions(path: Path = DEFAULT_ACTIONS_PATH, *, puppet_safe_mode: bool = False) -> list[ActionDefinition]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
