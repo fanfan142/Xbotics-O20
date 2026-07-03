@@ -170,7 +170,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
             detail = f" -> {item['detected_side']}" if item["connected"] else f" | {item['error']}"
             print(f"{status} device={item['canfd_device']} side={item['side']}{detail}")
             if args.verbose and item.get("sdk_log"):
-                print("  SDK 日志:")
+                print("  初始化日志:")
                 for line in str(item["sdk_log"]).splitlines()[-18:]:
                     print(f"    {line}")
         if not any(item["connected"] for item in results):
@@ -422,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     draft.add_argument("--save", action="store_true", help="保存到动作库")
     draft.set_defaults(func=cmd_draft)
 
-    import_demo = subparsers.add_parser("import-demo", help="导入 hand_dance txt 动作")
+    import_demo = subparsers.add_parser("import-demo", help="导入 txt 动作")
     import_demo.add_argument("paths", nargs="+", help="txt 文件或目录")
     import_demo.add_argument("--save", action="store_true", help="保存到动作库")
     import_demo.set_defaults(func=cmd_import_demo)

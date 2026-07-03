@@ -14,7 +14,7 @@ try:
     from xbotics_o20 import desktop_console
     from xbotics_o20.backends import O20DeviceState
     from xbotics_o20.device_scan import ScanReport
-    from xbotics_o20.desktop_console import InfoPanel, JointEditor, MainWindow, O20TwinWidget, UrdfTwinPanel, _combo_value
+    from xbotics_o20.desktop_console import ActionLibraryPanel, InfoPanel, JointEditor, MainWindow, O20TwinWidget, UrdfTwinPanel, _combo_value
     from xbotics_o20.joints import HOME_POSITIONS
 except Exception as exc:  # pragma: no cover - depends on local Qt runtime
     pytestmark = pytest.mark.skip(reason=f"PySide6 desktop runtime unavailable: {exc}")
@@ -83,6 +83,17 @@ def test_joint_editor_read_only_blocks_user_controls_but_keeps_sync() -> None:
     editor.deleteLater()
 
 
+def test_joint_editor_marks_abduction_ranges() -> None:
+    _app()
+    editor = JointEditor()
+
+    assert editor._meta_labels[4].text() == "侧摆 -30..+30 | 初始 +15"
+    assert editor._meta_labels[4].objectName() == "JointMetaAccent"
+    assert editor._meta_labels[5].text() == "0..+180 | 初始 0"
+    assert editor._meta_labels[5].objectName() == "JointMeta"
+    editor.deleteLater()
+
+
 def test_info_panel_shows_all_joint_telemetry() -> None:
     _app()
     panel = InfoPanel()
@@ -102,6 +113,8 @@ def test_info_panel_shows_all_joint_telemetry() -> None:
     panel.update_state(state)
 
     assert panel._summary["设备侧"].text() == "左手"
+    panel.set_control_source("手势遥控")
+    assert panel._summary["控制源"].text() == "手势遥控"
     assert panel._telemetry.item(15, 2).text() == "123°"
     assert panel._telemetry.item(15, 3).text() == "15mA"
     assert panel._telemetry.item(15, 4).text() == "45C"
@@ -126,10 +139,20 @@ def test_urdf_twin_html_exposes_side_sync() -> None:
 
     assert html is not None
     assert "window.setO20Side" in html
+    assert "window.setO20ViewMode" in html
     assert "side: latestSide" in html
     assert "leftYaw: 2.59" in html
     assert 'let latestSide = "left";' in html
+    assert set(panel._view_buttons) == {"back", "palm", "side", "reset"}
+    panel.set_view_mode("palm")
+    assert panel._view_mode == "palm"
+    panel.set_view_mode("reset")
+    assert panel._view_mode == "back"
     panel.deleteLater()
+
+
+def test_action_category_label_is_product_facing() -> None:
+    assert ActionLibraryPanel._category_label("demo") == "导入动作"
 
 
 def test_main_window_moves_manual_control_to_left_and_removes_right_manual_tab(tmp_path) -> None:
@@ -140,6 +163,9 @@ def test_main_window_moves_manual_control_to_left_and_removes_right_manual_tab(t
     assert hasattr(window, "_manual_panel")
     assert tab_names == ["预设手势", "手势识别", "猜拳", "宏功能"]
     assert "手动控制" not in tab_names
+    assert window._import_demo_btn.text() == "导入动作"
+    assert window._control_badge.text() == "控制源：空闲"
+    assert window._info_panel._summary["控制源"].text() == "空闲"
     assert window._backend_combo.currentText() == "直连模式"
     assert _combo_value(window._backend_combo) == "direct"
     window._apply_side_to_visual("left", update_combo=True)
@@ -156,9 +182,9 @@ def test_main_window_moves_manual_control_to_left_and_removes_right_manual_tab(t
     window.deleteLater()
 
 
-def test_main_window_imports_hand_dance_txt(tmp_path) -> None:
+def test_main_window_imports_txt_actions(tmp_path) -> None:
     _app()
-    source_dir = tmp_path / "hand_dance"
+    source_dir = tmp_path / "txt_actions"
     source_dir.mkdir()
     (source_dir / "OK.txt").write_text(
         "0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1000\n"
@@ -380,11 +406,15 @@ def test_action_control_source_makes_manual_editor_read_only(tmp_path) -> None:
 
     assert window._claim_control_source("action", "预设手势") is True
     assert window._manual_mode_label.text() == "实时读数"
+    assert window._control_badge.text() == "控制源：预设手势"
+    assert window._info_panel._summary["控制源"].text() == "预设手势"
     assert window._send_pose_btn.isEnabled() is False
     assert all(not slider.isEnabled() for slider in window._joint_editor._sliders)
 
     window._release_control_source("action")
     assert window._manual_mode_label.text() == "滑块控制"
+    assert window._control_badge.text() == "控制源：空闲"
+    assert window._info_panel._summary["控制源"].text() == "空闲"
     assert window._send_pose_btn.isEnabled() is True
     assert all(slider.isEnabled() for slider in window._joint_editor._sliders)
     window.close()

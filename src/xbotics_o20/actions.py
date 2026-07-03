@@ -29,7 +29,7 @@ PRODUCT_REQUIRED_ACTION_NAMES = (
     "sing",
 )
 
-# Windows demo hand_dance 的 16 个姿态字段顺序：
+# txt 动作的 16 个姿态字段顺序：
 # base flex(5) + tip flex(5) + abduction/rotation(6)，最后一列是毫秒停留。
 DEMO_TXT_TO_HAND16_INDEXES = (
     0,   # thumb_mcp
@@ -288,10 +288,10 @@ def load_demo_txt_action(path: Path, *, name: str | None = None, title: str | No
             positions = values[:JOINT_COUNT]
             hold_sec = max(0.04, values[-1] / 1000.0)
         else:
-            raise ValueError(f"{path} 第 {line_no} 行应为 17 列 demo 或 18 列 17 路兼容帧，当前 {len(values)} 列")
+            raise ValueError(f"{path} 第 {line_no} 行应为 17 列 txt 动作或 18 列 17 路兼容帧，当前 {len(values)} 列")
         frames.append({"positions": positions, "speed": 60, "hold_sec": hold_sec})
     if not frames:
-        raise ValueError(f"demo 动作为空：{path}")
+        raise ValueError(f"txt 动作为空：{path}")
     action_name = (name or path.stem).strip().lower().replace(" ", "_")
     return normalize_action(
         {

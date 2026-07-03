@@ -61,7 +61,7 @@ from .actions import (
     validate_action_library,
 )
 from .backends import O20Backend, build_backend
-from .config import DEFAULT_CONFIG_PATH, PROJECT_ROOT, AppConfig, load_app_config, resolve_project_path, save_app_config
+from .config import DEFAULT_CONFIG_PATH, AppConfig, load_app_config, resolve_project_path, save_app_config
 from .device_scan import build_scan_report, format_scan_report
 from .joints import HOME_POSITIONS, JOINTS, clamp_positions, limit_step_sequence, motor17_to_public20
 from .macro_service import MacroService, MacroStep
@@ -115,6 +115,36 @@ QLabel#MetricValue {
     color: #0f172a;
     font-weight: 700;
 }
+QLabel#Badge {
+    background: #e6f4f1;
+    color: #0f766e;
+    border: 1px solid #99d6cd;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-weight: 700;
+}
+QLabel#BadgeMuted {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #d8e0ea;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-weight: 700;
+}
+QLabel#JointMeta {
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
+}
+QLabel#JointMetaAccent {
+    background: #eefaf8;
+    color: #0f766e;
+    border: 1px solid #b7ddd7;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
 QLabel#StatusOk {
     background: transparent;
     color: #0f766e;
@@ -150,6 +180,11 @@ QPushButton#ActionButton {
     min-width: 92px;
     min-height: 36px;
     padding: 6px 10px;
+}
+QPushButton#ViewButton {
+    min-width: 54px;
+    min-height: 28px;
+    padding: 4px 8px;
 }
 QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QTextEdit, QListWidget, QTableWidget {
     background: #ffffff;
@@ -236,10 +271,6 @@ SIDE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("left", "左手"),
     ("right", "右手"),
 )
-
-
-def _default_hand_dance_dir() -> Path:
-    return PROJECT_ROOT.parent / "code" / "O20_hand_ui_canfd_release_2026_04_27" / "hand_dance"
 
 
 def _card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
@@ -347,6 +378,17 @@ def _fault_value(values: list[int] | None, index: int) -> str:
     except Exception:
         return "--"
     return "正常" if value == 0 else str(value)
+
+
+def _format_joint_bound(value: float) -> str:
+    if value > 0:
+        return f"+{value:.0f}"
+    return f"{value:.0f}"
+
+
+def _joint_meta_label(joint) -> str:
+    prefix = "侧摆 " if joint.key.endswith("_abd") else ""
+    return f"{prefix}{_format_joint_bound(joint.min_value)}..{_format_joint_bound(joint.max_value)} | 初始 {_format_joint_bound(joint.home)}"
 
 
 def _action_duration(action: ActionDefinition) -> float:
@@ -513,6 +555,7 @@ class InfoPanel(QFrame):
             ("连接", "未连接"),
             ("连接方式", "--"),
             ("设备侧", "--"),
+            ("控制源", "空闲"),
             ("当前动作", "--"),
             ("最近错误", "--"),
         ]):
@@ -569,6 +612,9 @@ class InfoPanel(QFrame):
 
     def set_current_action(self, text: str) -> None:
         self._summary["当前动作"].setText(text)
+
+    def set_control_source(self, text: str) -> None:
+        self._summary["控制源"].setText(text)
 
     def set_status(self, text: str, ok: bool = True) -> None:
         self._status.setObjectName("StatusOk" if ok else "StatusBad")
@@ -691,7 +737,7 @@ class ActionLibraryPanel(QFrame):
         return {
             "preset": "预设手势",
             "system": "系统动作",
-            "demo": "demo",
+            "demo": "导入动作",
             "custom": "自定义",
             "draft": "草稿",
             "raw": "原始动作",
@@ -725,6 +771,7 @@ class JointEditor(QWidget):
         super().__init__()
         self._sliders: list[QSlider] = []
         self._spins: list[QDoubleSpinBox] = []
+        self._meta_labels: list[QLabel] = []
         self._updating = False
 
         layout = QGridLayout(self)
@@ -732,20 +779,29 @@ class JointEditor(QWidget):
         for row, joint in enumerate(JOINTS):
             label = QLabel(f"{joint.index + 1:02d} {joint.name}")
             label.setMinimumWidth(96)
+            label.setToolTip(f"{joint.name}：{_joint_meta_label(joint)}")
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(int(joint.min_value), int(joint.max_value))
+            slider.setToolTip(f"{joint.name}：{_joint_meta_label(joint)}")
             spin = QDoubleSpinBox()
             spin.setRange(joint.min_value, joint.max_value)
             spin.setDecimals(0)
             spin.setSingleStep(1)
             spin.setMaximumWidth(88)
+            spin.setToolTip(f"{joint.name}：{_joint_meta_label(joint)}")
+            meta = QLabel(_joint_meta_label(joint))
+            meta.setMinimumWidth(132)
+            meta.setObjectName("JointMetaAccent" if joint.key.endswith("_abd") else "JointMeta")
+            meta.setToolTip("该关节的运动范围和初始位置")
             slider.valueChanged.connect(lambda value, index=row: self._slider_changed(index, value))
             spin.valueChanged.connect(lambda value, index=row: self._spin_changed(index, value))
             layout.addWidget(label, row, 0)
             layout.addWidget(slider, row, 1)
             layout.addWidget(spin, row, 2)
+            layout.addWidget(meta, row, 3)
             self._sliders.append(slider)
             self._spins.append(spin)
+            self._meta_labels.append(meta)
         self.set_positions(HOME_POSITIONS)
 
     def positions(self) -> list[float]:
@@ -912,6 +968,7 @@ class UrdfTwinPanel(QFrame):
         self._side = _normalize_side(side)
         self._web = None
         self._loaded = False
+        self._view_mode = "back"
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         head = QHBoxLayout()
@@ -919,6 +976,19 @@ class UrdfTwinPanel(QFrame):
         title.setObjectName("SectionTitle")
         head.addWidget(title)
         head.addStretch(1)
+        self._view_buttons: dict[str, QPushButton] = {}
+        for text, mode, tooltip in (
+            ("手背", "back", "切到手背视角"),
+            ("掌心", "palm", "切到掌心视角"),
+            ("侧面", "side", "切到侧面视角"),
+            ("复位", "reset", "恢复默认视角"),
+        ):
+            button = QPushButton(text)
+            button.setObjectName("ViewButton")
+            button.setToolTip(tooltip)
+            button.clicked.connect(lambda _checked=False, view_mode=mode: self.set_view_mode(view_mode))
+            self._view_buttons[mode] = button
+            head.addWidget(button)
         self._status = QLabel("加载中")
         self._status.setObjectName("Subtle")
         head.addWidget(self._status)
@@ -958,11 +1028,16 @@ class UrdfTwinPanel(QFrame):
         self._side = _normalize_side(side)
         self._push_side()
 
+    def set_view_mode(self, mode: str) -> None:
+        self._view_mode = mode if mode in {"back", "palm", "side"} else "back"
+        self._push_view_mode()
+
     def _on_loaded(self, ok: bool) -> None:
         self._loaded = ok
         self._status.setText(f"已加载 | {_side_label(self._side)}" if ok else "加载失败")
         self._push_side()
         self._push_positions()
+        self._push_view_mode()
 
     def _push_positions(self) -> None:
         if self._web is None:
@@ -978,6 +1053,13 @@ class UrdfTwinPanel(QFrame):
         self._web.page().runJavaScript(f"window.setO20Side && window.setO20Side({payload});")
         if self._loaded:
             self._status.setText(f"已加载 | {_side_label(self._side)}")
+        self._push_view_mode()
+
+    def _push_view_mode(self) -> None:
+        if self._web is None:
+            return
+        payload = json.dumps(self._view_mode)
+        self._web.page().runJavaScript(f"window.setO20ViewMode && window.setO20ViewMode({payload});")
 
     def _render_html(self) -> str | None:
         urdf_path = resolve_project_path("resources/urdf/model/urdf/R20V10.6(完整)-jian24.urdf")
@@ -1029,6 +1111,7 @@ class UrdfTwinPanel(QFrame):
 	    let viewer = null;
 	    let latestPositions = Array(16).fill(0);
 	    let latestSide = {side_payload};
+	    let latestViewMode = "back";
 	    window.setO20Positions = (positions) => {{
 	      if (Array.isArray(positions)) {{
 	        latestPositions = positions;
@@ -1038,7 +1121,25 @@ class UrdfTwinPanel(QFrame):
 	    window.setO20Side = (side) => {{
 	      latestSide = side === "left" ? "left" : "right";
 	      if (viewer) viewer.setSide(latestSide);
+	      applyViewMode(latestViewMode);
 	    }};
+	    window.setO20ViewMode = (mode) => {{
+	      applyViewMode(mode);
+	    }};
+	    function applyViewMode(mode) {{
+	      latestViewMode = ["back", "palm", "side"].includes(mode) ? mode : "back";
+	      if (!viewer) return;
+	      const presets = {{
+	        back: {{ yaw: latestSide === "left" ? 2.59 : -0.55, pitch: 0.34, distance: 0.68 }},
+	        palm: {{ yaw: latestSide === "left" ? -0.55 : 2.59, pitch: 0.28, distance: 0.68 }},
+	        side: {{ yaw: latestSide === "left" ? 1.35 : -1.35, pitch: 0.24, distance: 0.72 }},
+	      }};
+	      const preset = presets[latestViewMode];
+	      viewer.yaw = preset.yaw;
+	      viewer.pitch = preset.pitch;
+	      viewer.distance = preset.distance;
+	      viewer.target = [0, 0, 0.045];
+	    }}
 	    async function boot() {{
 	      try {{
 	        viewer = new O20UrdfViewer(document.getElementById("canvas"), {{
@@ -1054,6 +1155,7 @@ class UrdfTwinPanel(QFrame):
         await viewer.load();
 	        viewer.setJointPositions(latestPositions);
 	        viewer.setSide(latestSide);
+	        applyViewMode(latestViewMode);
 	        const meshCount = viewer.linkMeshes ? viewer.linkMeshes.size : 0;
 	        const linkCount = viewer.links ? viewer.links.size : 0;
 	        const jointCount = viewer.joints ? viewer.joints.length : 0;
@@ -1638,8 +1740,7 @@ class MainWindow(QMainWindow):
         self._teleop_last_status = ""
         self._manual_live_last_send_at = 0.0
         self._syncing_joint_editor = False
-        self._control_source = "idle"
-        self._control_source_label = "空闲"
+        self._set_control_source("idle", "空闲")
         self._last_sent_positions: list[float] | None = None
         self._last_step_limit_log_at = 0.0
         self._runtime_root = self._config_path.parent
@@ -1649,6 +1750,7 @@ class MainWindow(QMainWindow):
         self.resize(self._config.ui.window_width, self._config.ui.window_height)
         self.setStyleSheet(APP_STYLE)
         self._build_ui()
+        self._update_control_badge()
         self._load_actions()
         self._set_backend_status("未连接", ok=True)
 
@@ -1684,8 +1786,9 @@ class MainWindow(QMainWindow):
         self._connect_btn.clicked.connect(self._connect_backend)
         self._settings_btn = QPushButton("设置")
         self._settings_btn.clicked.connect(self._show_settings)
-        self._import_demo_btn = QPushButton("导入 hand_dance")
-        self._import_demo_btn.clicked.connect(self._import_hand_dance_actions)
+        self._import_demo_btn = QPushButton("导入动作")
+        self._import_demo_btn.setToolTip("从 txt 动作目录导入到当前动作库")
+        self._import_demo_btn.clicked.connect(self._import_txt_actions)
         self._macro_btn = QPushButton("宏功能")
         self._macro_btn.clicked.connect(self._show_macro_dialog)
         self._read_btn = QPushButton("刷新读数")
@@ -1697,6 +1800,9 @@ class MainWindow(QMainWindow):
         self._stop_btn.clicked.connect(self._request_stop)
         self._backend_status = QLabel()
         self._backend_status.setObjectName("StatusOk")
+        self._control_badge = QLabel("控制源：空闲")
+        self._control_badge.setObjectName("BadgeMuted")
+        self._control_badge.setToolTip("当前没有持续发送源，滑块可编辑目标姿态")
         for widget in [
             QLabel("连接方式"), self._backend_combo,
             QLabel("手型"), self._side_combo,
@@ -1712,6 +1818,7 @@ class MainWindow(QMainWindow):
         ]:
             toolbar_layout.addWidget(widget)
         toolbar_layout.addStretch(1)
+        toolbar_layout.addWidget(self._control_badge)
         toolbar_layout.addWidget(self._backend_status)
         outer.addWidget(toolbar)
 
@@ -1779,7 +1886,7 @@ class MainWindow(QMainWindow):
         visual_tabs.addTab(self._urdf_twin, "URDF 模型")
         visual_tabs.addTab(self._twin, "姿态视图")
         layout.addWidget(visual_tabs, 1)
-        panel, panel_layout = _card("ROS2 姿态数据")
+        panel, panel_layout = _card("20 位姿态数据")
         self._public20_text = QTextEdit()
         self._public20_text.setReadOnly(True)
         self._public20_text.setMaximumHeight(92)
@@ -1806,7 +1913,7 @@ class MainWindow(QMainWindow):
         self._send_pose_btn = QPushButton("发送当前姿态")
         self._send_pose_btn.setObjectName("Primary")
         self._send_pose_btn.clicked.connect(self._send_current_pose)
-        self._copy20_btn = QPushButton("复制 ROS2 数据")
+        self._copy20_btn = QPushButton("复制 20 位数据")
         self._copy20_btn.clicked.connect(self._copy_public20)
         self._save_pose_btn = QPushButton("保存为动作")
         self._save_pose_btn.clicked.connect(self._save_current_pose_as_action)
@@ -2015,8 +2122,7 @@ class MainWindow(QMainWindow):
         self._backend = None
         self._teleop_last_pose = None
         self._teleop_last_send_at = 0.0
-        self._control_source = "idle"
-        self._control_source_label = "空闲"
+        self._set_control_source("idle", "空闲")
         self._last_sent_positions = None
         self._connect_btn.setEnabled(True)
         self._connect_btn.setText("连接")
@@ -2186,11 +2292,31 @@ class MainWindow(QMainWindow):
         self._macro_btn.setEnabled(enabled)
         self._update_manual_editor_mode()
 
+    def _set_control_source(self, source: str, label: str) -> None:
+        self._control_source = source
+        self._control_source_label = label
+        self._update_control_badge()
+
+    def _update_control_badge(self) -> None:
+        active = self._control_source != "idle"
+        text = f"控制源：{self._control_source_label}"
+        if hasattr(self, "_control_badge"):
+            self._control_badge.setText(text)
+            self._control_badge.setObjectName("Badge" if active else "BadgeMuted")
+            self._control_badge.setToolTip(
+                f"当前由{self._control_source_label}持续发送，滑块只同步实时读数"
+                if active
+                else "当前没有持续发送源，滑块可编辑目标姿态"
+            )
+            self._control_badge.style().unpolish(self._control_badge)
+            self._control_badge.style().polish(self._control_badge)
+        if hasattr(self, "_info_panel"):
+            self._info_panel.set_control_source(self._control_source_label)
+
     def _claim_control_source(self, source: str, label: str, *, transient: bool = False) -> bool:
         if self._control_source in {"idle", source}:
             if not transient:
-                self._control_source = source
-                self._control_source_label = label
+                self._set_control_source(source, label)
                 self._update_manual_editor_mode()
             return True
         self._info_panel.set_status(f"当前由{self._control_source_label}控制，请先停止或关闭该模式", ok=False)
@@ -2199,8 +2325,7 @@ class MainWindow(QMainWindow):
     def _release_control_source(self, source: str) -> None:
         if self._control_source != source:
             return
-        self._control_source = "idle"
-        self._control_source_label = "空闲"
+        self._set_control_source("idle", "空闲")
         self._update_manual_editor_mode()
 
     def _manual_editor_is_read_only(self) -> bool:
@@ -2217,7 +2342,11 @@ class MainWindow(QMainWindow):
                 getattr(self, button_name).setEnabled(not read_only)
         if hasattr(self, "_manual_mode_label"):
             self._manual_mode_label.setText("实时读数" if read_only else "滑块控制")
-            self._manual_mode_label.setToolTip("滑块正在跟随当前控制源回读姿态" if read_only else "当前滑块可直接编辑目标姿态")
+            self._manual_mode_label.setToolTip(
+                f"滑块正在跟随{self._control_source_label}回读姿态"
+                if read_only
+                else "当前滑块可直接编辑目标姿态"
+            )
             self._manual_mode_label.setObjectName("Subtle" if read_only else "StatusOk")
             self._manual_mode_label.style().unpolish(self._manual_mode_label)
             self._manual_mode_label.style().polish(self._manual_mode_label)
@@ -2375,27 +2504,23 @@ class MainWindow(QMainWindow):
         self._load_actions()
         self._log_line(f"已保存动作：{action.title}")
 
-    def _import_hand_dance_actions(self) -> None:
-        default_dir = _default_hand_dance_dir()
-        if default_dir.exists():
-            source_dir = default_dir
-        else:
-            selected = QFileDialog.getExistingDirectory(self, "选择 hand_dance 动作目录", str(PROJECT_ROOT.parent))
-            if not selected:
-                return
-            source_dir = Path(selected)
+    def _import_txt_actions(self) -> None:
+        selected = QFileDialog.getExistingDirectory(self, "选择 txt 动作目录", str(self._runtime_root))
+        if not selected:
+            return
+        source_dir = Path(selected)
         try:
             imported = self._import_demo_actions(source_dir)
         except Exception as exc:
-            QMessageBox.critical(self, "导入 hand_dance 失败", str(exc))
-            self._log_line(f"导入 hand_dance 失败：{exc}")
+            QMessageBox.critical(self, "导入动作失败", str(exc))
+            self._log_line(f"导入动作失败：{exc}")
             return
         self._load_actions()
         self._right_tabs.setCurrentWidget(self._action_panel)
         names = "、".join(action.title for action in imported[:6])
         suffix = f" 等 {len(imported)} 个" if len(imported) > 6 else ""
-        self._info_panel.set_status(f"已导入 hand_dance：{len(imported)} 个", ok=True)
-        self._log_line(f"已从 {source_dir} 导入 hand_dance：{names}{suffix}")
+        self._info_panel.set_status(f"已导入动作：{len(imported)} 个", ok=True)
+        self._log_line(f"已导入动作：{names}{suffix}")
 
     def _import_demo_actions(self, source_dir: Path) -> list[ActionDefinition]:
         source_paths = sorted(source_dir.glob("*.txt"))
@@ -2411,7 +2536,7 @@ class MainWindow(QMainWindow):
     def _copy_public20(self) -> None:
         public20 = motor17_to_public20(self._joint_editor.positions())
         QApplication.clipboard().setText(json.dumps(public20, ensure_ascii=False))
-        self._log_line("ROS2 20 位 position 已复制")
+        self._log_line("20 位 position 已复制")
 
     def _apply_positions_to_visual(self, positions: list[float]) -> None:
         clamped = clamp_positions(positions)
