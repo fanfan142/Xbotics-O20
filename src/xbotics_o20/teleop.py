@@ -139,10 +139,25 @@ def _finger_splay_angle(landmarks: Sequence[Any], mcp: int, pip: int, basis) -> 
     return math.degrees(math.atan2(lateral, max(0.15, forward)))
 
 
-def _joint_from_splay(index: int, angle: float, flexion: float, *, invert: bool = False) -> float:
+def _joint_from_splay(
+    index: int,
+    angle: float,
+    flexion: float,
+    *,
+    invert: bool = False,
+    gain: float = 2.4,
+    deadzone_deg: float = 0.0,
+) -> float:
     signed = -angle if invert else angle
+    deadzone = max(0.0, float(deadzone_deg))
+    if abs(signed) <= deadzone:
+        signed = 0.0
+    elif signed > 0:
+        signed -= deadzone
+    else:
+        signed += deadzone
     joint = JOINTS[index]
-    raw = max(joint.min_value, min(joint.max_value, joint.home + signed * 2.4))
+    raw = max(joint.min_value, min(joint.max_value, joint.home + signed * max(0.0, float(gain))))
     damped = _lerp(raw, joint.home, max(0.0, min(0.65, flexion * 0.65)))
     return max(joint.min_value, min(joint.max_value, damped))
 
@@ -153,6 +168,8 @@ def landmarks_to_o20_positions(
     previous: Sequence[float] | None = None,
     smoothing: float = 0.45,
     handedness: str | None = None,
+    splay_gain: float = 2.4,
+    splay_deadzone_deg: float = 0.0,
 ) -> TeleopPose:
     if len(landmarks) < 21:
         raise ValueError("MediaPipe 手部骨架必须包含 21 个点")
@@ -175,19 +192,19 @@ def landmarks_to_o20_positions(
     positions[2] = _joint_from_flexion(2, thumb_base)
     positions[3] = _joint_from_flexion(3, thumb_base)
 
-    positions[4] = _joint_from_splay(4, index_splay, index_base)
+    positions[4] = _joint_from_splay(4, index_splay, index_base, gain=splay_gain, deadzone_deg=splay_deadzone_deg)
     positions[5] = _joint_from_flexion(5, index_base)
     positions[6] = _joint_from_flexion(6, index_tip)
 
-    positions[7] = _joint_from_splay(7, middle_splay, middle_base)
+    positions[7] = _joint_from_splay(7, middle_splay, middle_base, gain=splay_gain, deadzone_deg=splay_deadzone_deg)
     positions[8] = _joint_from_flexion(8, middle_base)
     positions[9] = _joint_from_flexion(9, middle_tip)
 
-    positions[10] = _joint_from_splay(10, ring_splay, ring_base)
+    positions[10] = _joint_from_splay(10, ring_splay, ring_base, gain=splay_gain, deadzone_deg=splay_deadzone_deg)
     positions[11] = _joint_from_flexion(11, ring_base)
     positions[12] = _joint_from_flexion(12, ring_tip)
 
-    positions[13] = _joint_from_splay(13, pinky_splay, pinky_base, invert=True)
+    positions[13] = _joint_from_splay(13, pinky_splay, pinky_base, invert=True, gain=splay_gain, deadzone_deg=splay_deadzone_deg)
     positions[14] = _joint_from_flexion(14, pinky_base)
     positions[15] = _joint_from_flexion(15, pinky_tip)
 

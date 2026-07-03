@@ -74,3 +74,15 @@ def test_teleop_maps_finger_splay_to_abduction_joints() -> None:
     assert spread.positions[13] < neutral.positions[13]
     assert JOINTS[4].min_value <= spread.positions[4] <= JOINTS[4].max_value
     assert JOINTS[13].min_value <= spread.positions[13] <= JOINTS[13].max_value
+
+
+def test_teleop_splay_gain_and_deadzone_are_configurable() -> None:
+    landmarks = _spread_hand(index_pip_x=-0.38, pinky_pip_x=0.38)
+    base = landmarks_to_o20_positions(landmarks, smoothing=1.0, splay_gain=2.4, splay_deadzone_deg=0.0)
+    boosted = landmarks_to_o20_positions(landmarks, smoothing=1.0, splay_gain=3.2, splay_deadzone_deg=0.0)
+    damped = landmarks_to_o20_positions(landmarks, smoothing=1.0, splay_gain=3.2, splay_deadzone_deg=8.0)
+
+    assert boosted.positions[4] < base.positions[4]
+    assert boosted.positions[13] < base.positions[13]
+    assert damped.positions[4] > boosted.positions[4]
+    assert damped.positions[13] > boosted.positions[13]

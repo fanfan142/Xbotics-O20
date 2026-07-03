@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -417,5 +418,41 @@ def test_action_control_source_makes_manual_editor_read_only(tmp_path) -> None:
     assert window._info_panel._summary["控制源"].text() == "空闲"
     assert window._send_pose_btn.isEnabled() is True
     assert all(slider.isEnabled() for slider in window._joint_editor._sliders)
+    window.close()
+    window.deleteLater()
+
+
+def test_teleop_parameters_are_used_for_frame_mapping(tmp_path, monkeypatch) -> None:
+    _app()
+    window = MainWindow(config_path=tmp_path / "config.json")
+    backend = FakeSendBackend()
+    window._backend = backend
+    window._latest_state = _safe_state()
+    window._camera_service = SimpleNamespace(is_running=True, last_error="", stop=lambda: None)
+    window._teleop_smoothing_spin.setValue(0.70)
+    window._teleop_splay_gain_spin.setValue(3.10)
+    window._teleop_splay_deadzone_spin.setValue(2.0)
+    window._teleop_send_delta_spin.setValue(0.0)
+    captured: dict[str, float] = {}
+    positions = list(HOME_POSITIONS)
+    positions[4] = -12
+    positions[7] = 3
+    positions[10] = -5
+    positions[13] = -18
+
+    def fake_mapper(_landmarks, **kwargs):
+        captured.update(kwargs)
+        return desktop_console.TeleopPose(positions=positions, flexions={})
+
+    monkeypatch.setattr(desktop_console, "landmarks_to_o20_positions", fake_mapper)
+
+    window._teleop_check.setChecked(True)
+    window._handle_teleop_frame(SimpleNamespace(landmarks=[object()] * 21, handedness="Left", gesture="Paper"))
+
+    assert captured["smoothing"] == 0.70
+    assert captured["splay_gain"] == 3.10
+    assert captured["splay_deadzone_deg"] == 2.0
+    assert backend.sent[-1][0] == positions
+    assert window._teleop_splay_status.text() == "-12 +3 -5 -18"
     window.close()
     window.deleteLater()

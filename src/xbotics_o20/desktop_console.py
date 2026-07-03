@@ -1961,11 +1961,6 @@ class MainWindow(QMainWindow):
         self._teleop_check = QCheckBox("手势遥控")
         self._teleop_check.stateChanged.connect(self._on_teleop_toggle)
         controls_layout.addWidget(self._teleop_check)
-        controls_layout.addWidget(QLabel("遥控频率"))
-        self._teleop_rate_spin = QSpinBox()
-        self._teleop_rate_spin.setRange(2, 20)
-        self._teleop_rate_spin.setValue(10)
-        controls_layout.addWidget(self._teleop_rate_spin)
         self._camera_toggle_btn = QPushButton("启动摄像头")
         self._camera_toggle_btn.setObjectName("Primary")
         self._camera_toggle_btn.setMinimumWidth(108)
@@ -1974,13 +1969,63 @@ class MainWindow(QMainWindow):
         controls_layout.addStretch(1)
         camera_layout.addWidget(controls)
 
+        teleop_params = QWidget()
+        teleop_params.setObjectName("Transparent")
+        params_layout = QHBoxLayout(teleop_params)
+        params_layout.setContentsMargins(0, 0, 0, 0)
+        params_layout.setSpacing(8)
+        params_layout.addWidget(QLabel("频率"))
+        self._teleop_rate_spin = QSpinBox()
+        self._teleop_rate_spin.setRange(2, 20)
+        self._teleop_rate_spin.setValue(10)
+        self._teleop_rate_spin.setMaximumWidth(64)
+        params_layout.addWidget(self._teleop_rate_spin)
+        params_layout.addWidget(QLabel("平滑"))
+        self._teleop_smoothing_spin = QDoubleSpinBox()
+        self._teleop_smoothing_spin.setRange(0.10, 1.00)
+        self._teleop_smoothing_spin.setDecimals(2)
+        self._teleop_smoothing_spin.setSingleStep(0.05)
+        self._teleop_smoothing_spin.setValue(0.45)
+        self._teleop_smoothing_spin.setMaximumWidth(76)
+        self._teleop_smoothing_spin.setToolTip("手势遥控位置平滑系数，数值越大跟手越快")
+        params_layout.addWidget(self._teleop_smoothing_spin)
+        params_layout.addWidget(QLabel("侧摆灵敏"))
+        self._teleop_splay_gain_spin = QDoubleSpinBox()
+        self._teleop_splay_gain_spin.setRange(0.50, 4.00)
+        self._teleop_splay_gain_spin.setDecimals(2)
+        self._teleop_splay_gain_spin.setSingleStep(0.10)
+        self._teleop_splay_gain_spin.setValue(2.40)
+        self._teleop_splay_gain_spin.setMaximumWidth(76)
+        self._teleop_splay_gain_spin.setToolTip("手势侧摆角到关节侧摆的映射倍率")
+        params_layout.addWidget(self._teleop_splay_gain_spin)
+        params_layout.addWidget(QLabel("侧摆死区"))
+        self._teleop_splay_deadzone_spin = QDoubleSpinBox()
+        self._teleop_splay_deadzone_spin.setRange(0.00, 8.00)
+        self._teleop_splay_deadzone_spin.setDecimals(1)
+        self._teleop_splay_deadzone_spin.setSingleStep(0.5)
+        self._teleop_splay_deadzone_spin.setValue(0.0)
+        self._teleop_splay_deadzone_spin.setMaximumWidth(72)
+        self._teleop_splay_deadzone_spin.setToolTip("小于该角度的手指侧摆会被忽略")
+        params_layout.addWidget(self._teleop_splay_deadzone_spin)
+        params_layout.addWidget(QLabel("发送阈值"))
+        self._teleop_send_delta_spin = QDoubleSpinBox()
+        self._teleop_send_delta_spin.setRange(0.00, 6.00)
+        self._teleop_send_delta_spin.setDecimals(1)
+        self._teleop_send_delta_spin.setSingleStep(0.2)
+        self._teleop_send_delta_spin.setValue(1.2)
+        self._teleop_send_delta_spin.setMaximumWidth(72)
+        self._teleop_send_delta_spin.setToolTip("姿态变化小于该角度时不重复发送")
+        params_layout.addWidget(self._teleop_send_delta_spin)
+        params_layout.addStretch(1)
+        camera_layout.addWidget(teleop_params)
+
         status_row = QWidget()
         status_row.setObjectName("Transparent")
         status_layout = QGridLayout(status_row)
         status_layout.setContentsMargins(0, 0, 0, 0)
         status_layout.setHorizontalSpacing(12)
         status_layout.setVerticalSpacing(0)
-        status_layout.setColumnStretch(5, 1)
+        status_layout.setColumnStretch(7, 1)
         self._camera_status = QLabel("未启动")
         self._camera_status.setObjectName("Subtle")
         self._camera_status.setMinimumWidth(92)
@@ -1992,7 +2037,11 @@ class MainWindow(QMainWindow):
         self._mediapipe_status = QLabel()
         self._mediapipe_status.setMinimumWidth(124)
         self._refresh_mediapipe_status()
-        for label in (self._camera_status, self._teleop_status, self._mediapipe_status):
+        self._teleop_splay_status = QLabel("侧摆 --")
+        self._teleop_splay_status.setObjectName("Subtle")
+        self._teleop_splay_status.setMinimumWidth(118)
+        self._teleop_splay_status.setToolTip("手势遥控最近一次侧摆输出")
+        for label in (self._camera_status, self._teleop_status, self._mediapipe_status, self._teleop_splay_status):
             label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         status_layout.addWidget(QLabel("摄像头状态"), 0, 0)
@@ -2001,6 +2050,8 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self._teleop_status, 0, 3)
         status_layout.addWidget(QLabel("识别状态"), 0, 4)
         status_layout.addWidget(self._mediapipe_status, 0, 5)
+        status_layout.addWidget(QLabel("侧摆输出"), 0, 6)
+        status_layout.addWidget(self._teleop_splay_status, 0, 7)
         camera_layout.addWidget(status_row)
         return camera_bar
 
@@ -2714,6 +2765,19 @@ class MainWindow(QMainWindow):
         self._teleop_status.setText(_teleop_status_label(text))
         self._teleop_status.setToolTip(text)
 
+    def _update_teleop_splay_status(self, positions: list[float] | None) -> None:
+        if not hasattr(self, "_teleop_splay_status"):
+            return
+        if positions is None:
+            self._teleop_splay_status.setText("侧摆 --")
+            self._teleop_splay_status.setToolTip("手势遥控最近一次侧摆输出")
+            return
+        indexes = (4, 7, 10, 13)
+        values = [positions[index] for index in indexes]
+        text = " ".join(f"{value:+.0f}" for value in values)
+        self._teleop_splay_status.setText(text)
+        self._teleop_splay_status.setToolTip("食指 / 中指 / 无名指 / 小指侧摆输出：" + text)
+
     def _set_camera_status(self, text: str) -> None:
         self._camera_status.setText(_camera_status_label(text))
         self._camera_status.setToolTip(text)
@@ -2771,6 +2835,7 @@ class MainWindow(QMainWindow):
         self._camera_index_spin.setEnabled(True)
         self._set_camera_status("状态：未启动")
         self._teleop_last_pose = None
+        self._update_teleop_splay_status(None)
         if self._teleop_check.isChecked():
             self._update_teleop_status("遥控：等待摄像头", ok=False)
         else:
@@ -2814,8 +2879,10 @@ class MainWindow(QMainWindow):
             pose: TeleopPose = landmarks_to_o20_positions(
                 detection.landmarks,
                 previous=self._teleop_last_pose,
-                smoothing=0.45,
+                smoothing=self._teleop_smoothing_spin.value(),
                 handedness=getattr(detection, "handedness", None),
+                splay_gain=self._teleop_splay_gain_spin.value(),
+                splay_deadzone_deg=self._teleop_splay_deadzone_spin.value(),
             )
         except Exception as exc:
             self._update_teleop_status(f"遥控：姿态解析失败 {exc}", ok=False)
@@ -2823,7 +2890,7 @@ class MainWindow(QMainWindow):
 
         if self._teleop_last_pose is not None:
             max_delta = max(abs(a - b) for a, b in zip(pose.positions, self._teleop_last_pose))
-            if max_delta < 1.2:
+            if max_delta < self._teleop_send_delta_spin.value():
                 self._teleop_last_send_at = now
                 return
 
@@ -2840,6 +2907,7 @@ class MainWindow(QMainWindow):
             return
         self._teleop_last_pose = sent_positions
         gesture = getattr(detection, "gesture", None) or "手部姿态"
+        self._update_teleop_splay_status(sent_positions)
         self._update_teleop_status(f"遥控：已发送 {gesture}", ok=True)
 
     def _on_mirror_changed(self) -> None:
