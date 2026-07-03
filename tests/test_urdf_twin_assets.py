@@ -5,7 +5,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-ASSET_ROOT = Path(__file__).resolve().parents[2] / "action_generate_yx" / "urdf" / "R20-URDF-right"
+ASSET_ROOT = Path(__file__).resolve().parents[1] / "resources" / "urdf" / "model"
+VIEWER_SCRIPT = Path(__file__).resolve().parents[1] / "resources" / "urdf" / "urdf_viewer.js"
 URDF_PATH = ASSET_ROOT / "urdf" / "R20V10.6(完整)-jian24.urdf"
 MESH_DIR = ASSET_ROOT / "meshes"
 
@@ -61,3 +62,10 @@ def test_o20_stl_assets_all_have_triangles() -> None:
     assert len(mesh_paths) == 17
     for mesh_path in mesh_paths:
         assert _find_binary_stl_triangle_count(mesh_path) > 0, mesh_path.name
+
+
+def test_o20_urdf_orbit_drag_tracks_pointer_direction() -> None:
+    script = VIEWER_SCRIPT.read_text(encoding="utf-8")
+
+    assert "this.yaw += dx * 0.006;" in script
+    assert "this.yaw -= dx * 0.006;" not in script

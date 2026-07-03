@@ -212,7 +212,7 @@ class O20UrdfViewer {
       const dy = event.clientY - lastY;
       lastX = event.clientX;
       lastY = event.clientY;
-      this.yaw -= dx * 0.006;
+      this.yaw += dx * 0.006;
       this.pitch = clamp(this.pitch + dy * 0.005, -1.15, 1.25);
     });
     this.canvas.addEventListener("pointerup", () => {

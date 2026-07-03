@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .config import O20Config, PROJECT_ROOT, WORKSPACE_ROOT, resolve_project_path
+from .config import O20Config, PROJECT_ROOT, resolve_project_path
 from .device_scan import scan_sys_usb
 from .native_libs import NativeLibraryStatus, ensure_canfd_native_libraries, patch_canfd_loader
 from .native_o20 import NativeO20Controller
@@ -105,10 +105,6 @@ def _candidate_sdk_paths(sdk_root: str | Path | None) -> list[Path]:
     if sdk_root:
         root = resolve_project_path(sdk_root)
         paths.extend([root / "linker_hand_o20_ros2", root])
-    action_generate_sdk = WORKSPACE_ROOT / "action_generate_yx" / "linkerhand-o20-ros2"
-    paths.extend([action_generate_sdk / "linker_hand_o20_ros2", action_generate_sdk])
-    workspace_sdk = WORKSPACE_ROOT / "linkerhand-o20-ros2"
-    paths.extend([workspace_sdk / "linker_hand_o20_ros2", workspace_sdk])
     return paths
 
 

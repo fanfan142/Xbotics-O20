@@ -16,7 +16,7 @@ from xbotics_o20.joints import HOME_POSITIONS, JOINT_COUNT
 from xbotics_o20.player import ActionPlayer
 
 
-def test_load_action_generate_yx_library():
+def test_load_runtime_action_library():
     path = Path(__file__).resolve().parents[1] / "runtime" / "action_library" / "actions.json"
     actions = load_actions(path)
 
@@ -49,6 +49,66 @@ def test_player_sends_mock_frames():
     assert backend.get_state().positions == target
 
 
+def test_player_limits_initial_step_from_current_state():
+    backend = MockO20Backend()
+    backend.connect()
+    start = list(HOME_POSITIONS)
+    start[5] = 180
+    backend.send_positions(start)
+    target = list(HOME_POSITIONS)
+    action = ActionDefinition(
+        name="test",
+        title="测试",
+        description="",
+        category="test",
+        aliases=[],
+        loop=1,
+        frames=[ActionFrame(positions=target, speed=60, hold_sec=0.04)],
+    )
+    sent: list[list[float]] = []
+
+    result = ActionPlayer(SafetyConfig(max_step_per_frame=45, min_frame_dt_s=0)).play(
+        action,
+        backend,
+        frame_callback=lambda positions: sent.append(positions),
+    )
+
+    assert result.ok
+    assert [round(frame[5]) for frame in sent] == [135, 90, 45, 0]
+    assert backend.get_state().positions == target
+
+
+def test_player_limits_loop_boundary_steps():
+    backend = MockO20Backend()
+    backend.connect()
+    first = list(HOME_POSITIONS)
+    last = list(HOME_POSITIONS)
+    first[5] = 0
+    last[5] = 180
+    action = ActionDefinition(
+        name="test",
+        title="测试",
+        description="",
+        category="test",
+        aliases=[],
+        loop=2,
+        frames=[
+            ActionFrame(positions=first, speed=60, hold_sec=0.04),
+            ActionFrame(positions=last, speed=60, hold_sec=0.04),
+        ],
+    )
+    sent: list[list[float]] = []
+
+    result = ActionPlayer(SafetyConfig(max_step_per_frame=60, min_frame_dt_s=0)).play(
+        action,
+        backend,
+        frame_callback=lambda positions: sent.append(positions),
+    )
+
+    assert result.ok
+    assert [round(frame[5]) for frame in sent] == [0, 60, 120, 180, 120, 60, 0, 60, 120, 180]
+
+
 def test_player_stop_returns_home():
     backend = MockO20Backend()
     backend.connect()
@@ -75,6 +135,47 @@ def test_player_stop_returns_home():
     assert not result.ok
     assert "已回初始" in result.message
     assert backend.get_state().positions == HOME_POSITIONS
+
+
+def test_player_stop_returns_home_with_step_limit():
+    class RecordingBackend(MockO20Backend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.sent: list[list[float]] = []
+
+        def send_positions(self, positions: list[float], *, speed: int = 60) -> bool:
+            ok = super().send_positions(positions, speed=speed)
+            if ok:
+                self.sent.append(list(positions))
+            return ok
+
+    backend = RecordingBackend()
+    backend.connect()
+    start = list(HOME_POSITIONS)
+    start[5] = 180
+    backend.send_positions(start)
+    backend.sent.clear()
+    action = ActionDefinition(
+        name="test",
+        title="测试",
+        description="",
+        category="test",
+        aliases=[],
+        loop=1,
+        frames=[ActionFrame(positions=list(HOME_POSITIONS), speed=60, hold_sec=0.04)],
+    )
+    stop_event = threading.Event()
+    stop_event.set()
+
+    result = ActionPlayer(SafetyConfig(max_step_per_frame=45, min_frame_dt_s=0, return_home_on_stop=True)).play(
+        action,
+        backend,
+        stop_event=stop_event,
+    )
+
+    assert not result.ok
+    assert "已回初始（4 步）" in result.message
+    assert [round(frame[5]) for frame in backend.sent] == [135, 90, 45, 0]
 
 
 class HotBackend(MockO20Backend):

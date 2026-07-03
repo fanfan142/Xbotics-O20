@@ -3,9 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from xbotics_o20 import backends
+from xbotics_o20 import native_libs
 from xbotics_o20.backends import DirectO20Backend
 from xbotics_o20.joints import HOME_POSITIONS, JOINT_COUNT, clamp_positions
 from xbotics_o20.native_libs import NativeLibraryStatus
+
+
+def test_default_runtime_lookup_does_not_probe_workspace_paths() -> None:
+    assert backends._candidate_sdk_paths(None) == []
+    assert native_libs._sdk_roots(None) == []
 
 
 class FakeController:

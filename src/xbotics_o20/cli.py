@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -22,8 +23,8 @@ from .backends import build_backend
 from .canfd_diag import format_canfd_diagnostics, run_canfd_diagnostics
 from .config import DEFAULT_CONFIG_PATH, AppConfig, load_app_config, resolve_project_path
 from .device_scan import build_scan_report, format_scan_report
-from .joints import JOINT_COUNT, clamp_positions, joints_payload, motor17_to_public20
-from .player import ActionPlayer
+from .joints import JOINT_COUNT, clamp_positions, joints_payload, limit_step_sequence, motor17_to_public20
+from .player import ActionPlayer, ensure_state_safe
 from .udev_rules import DEFAULT_UDEV_RULE_PATH, build_rules_for_targets
 
 
@@ -199,6 +200,25 @@ def cmd_canfd_diag(args: argparse.Namespace) -> int:
     return 0 if result.get("detected") else 2
 
 
+def _send_pose_safely(config: AppConfig, backend, positions: list[float], *, speed: int) -> tuple[bool, int]:
+    state = backend.get_state()
+    ensure_state_safe(state, config.safety)
+    target = clamp_positions(positions)
+    if config.safety.clamp_positions and config.safety.max_step_per_frame > 0:
+        sequence = limit_step_sequence([state.positions, target], float(config.safety.max_step_per_frame))[1:]
+    else:
+        sequence = [target]
+    sent = 0
+    for index, point in enumerate(sequence):
+        if not backend.send_positions(point, speed=speed):
+            return False, sent
+        sent += 1
+        ensure_state_safe(backend.get_state(), config.safety)
+        if index < len(sequence) - 1:
+            time.sleep(max(0.0, float(config.safety.min_frame_dt_s)))
+    return True, sent
+
+
 def cmd_udev_rule(args: argparse.Namespace) -> int:
     rules = build_rules_for_targets(
         vendor_id=args.vendor_id or "",
@@ -253,8 +273,8 @@ def cmd_pose(args: argparse.Namespace) -> int:
         return 0
     backend = _connect_backend(config, args.backend, args.side, args.canfd_device)
     try:
-        ok = backend.send_positions(positions, speed=args.speed or config.o20.default_speed)
-        print("发送成功" if ok else "发送失败")
+        ok, sent = _send_pose_safely(config, backend, positions, speed=args.speed or config.o20.default_speed)
+        print(f"发送成功：{sent} 步" if ok else f"发送失败：已发送 {sent} 步")
         return 0 if ok else 2
     finally:
         backend.disconnect()

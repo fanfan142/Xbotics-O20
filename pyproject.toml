@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xbotics-o20"
-version = "0.1.0"
-description = "Xbotics O20 control helpers for Ubuntu and ROS 2"
+version = "0.1.1"
+description = "Cross-platform desktop console for Xbotics O20 dexterous hand"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["PySide6>=6.6", "opencv-python>=4.12.0", "mediapipe>=0.10.33"]

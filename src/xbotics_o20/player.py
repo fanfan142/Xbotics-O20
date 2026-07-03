@@ -7,7 +7,7 @@ from typing import Callable
 
 from .actions import ActionDefinition, ActionFrame
 from .config import SafetyConfig
-from .joints import HOME_POSITIONS, limit_step_sequence
+from .joints import HOME_POSITIONS, clamp_positions, limit_step_sequence
 
 
 @dataclass(frozen=True)
@@ -49,29 +49,60 @@ def _safe_return_home(backend, config: SafetyConfig) -> str:
     if not getattr(backend, "is_connected", False):
         return "设备未连接，无法回初始"
     try:
-        ok = bool(backend.send_positions(list(HOME_POSITIONS), speed=int(config.return_home_speed)))
+        sequence = [list(HOME_POSITIONS)]
+        if config.clamp_positions and config.max_step_per_frame > 0:
+            try:
+                state = backend.get_state()
+                sequence = limit_step_sequence([state.positions, HOME_POSITIONS], float(config.max_step_per_frame))[1:]
+            except Exception as exc:
+                if config.stop_on_read_error:
+                    return f"回初始取消：无法读取当前姿态：{exc}"
+        for index, point in enumerate(sequence):
+            ok = bool(backend.send_positions(point, speed=int(config.return_home_speed)))
+            if not ok:
+                return "回初始发送失败"
+            if index < len(sequence) - 1:
+                time.sleep(max(0.0, float(config.min_frame_dt_s)))
     except Exception as exc:
         return f"回初始异常：{exc}"
-    return "已回初始" if ok else "回初始发送失败"
+    return "已回初始" if len(sequence) <= 1 else f"已回初始（{len(sequence)} 步）"
 
 
-def _expanded_frames(action: ActionDefinition, config: SafetyConfig) -> list[ActionFrame]:
+def _expanded_frames(action: ActionDefinition, config: SafetyConfig, start_positions: list[float] | None = None) -> list[ActionFrame]:
     frames = action.frames
     if not config.clamp_positions or config.max_step_per_frame <= 0:
         return frames
     expanded: list[ActionFrame] = []
+    reference = clamp_positions(start_positions) if start_positions is not None else None
     for frame in frames:
-        if not expanded:
+        if reference is None:
             expanded.append(frame)
+            reference = frame.positions
             continue
-        points = limit_step_sequence([expanded[-1].positions, frame.positions], config.max_step_per_frame)
+        points = limit_step_sequence([reference, frame.positions], config.max_step_per_frame)
         if len(points) <= 2:
             expanded.append(frame)
+            reference = frame.positions
             continue
         slice_hold = max(config.min_frame_dt_s, frame.hold_sec / (len(points) - 1))
         for point in points[1:]:
             expanded.append(ActionFrame(positions=point, speed=frame.speed, hold_sec=slice_hold))
+        reference = frame.positions
     return expanded
+
+
+def _playback_frames(action: ActionDefinition, config: SafetyConfig, start_positions: list[float]) -> list[ActionFrame]:
+    loops = max(1, action.loop)
+    if not config.clamp_positions or config.max_step_per_frame <= 0:
+        return list(action.frames) * loops
+    frames: list[ActionFrame] = []
+    reference = clamp_positions(start_positions)
+    for _ in range(loops):
+        loop_frames = _expanded_frames(action, config, reference)
+        frames.extend(loop_frames)
+        if loop_frames:
+            reference = loop_frames[-1].positions
+    return frames
 
 
 class ActionPlayer:
@@ -90,25 +121,26 @@ class ActionPlayer:
         stop_event = stop_event or threading.Event()
         if not getattr(backend, "is_connected", False):
             return PlayResult(False, "设备未连接")
-        frames = _expanded_frames(action, self.safety_config)
-        total = len(frames) * max(1, action.loop)
         sent = 0
         try:
-            for _ in range(max(1, action.loop)):
-                for frame in frames:
-                    if stop_event.is_set():
-                        safe_message = _safe_return_home(backend, self.safety_config)
-                        return PlayResult(False, f"{action.title} 已停止，{safe_message}", sent)
-                    if not backend.send_positions(frame.positions, speed=frame.speed):
-                        safe_message = _safe_return_home(backend, self.safety_config)
-                        return PlayResult(False, f"{action.title} 第 {sent + 1}/{total} 帧发送失败，{safe_message}", sent)
-                    ensure_state_safe(backend.get_state(), self.safety_config)
-                    if frame_callback is not None:
-                        frame_callback(list(frame.positions))
-                    sent += 1
-                    if progress_callback is not None:
-                        progress_callback(sent, total)
-                    time.sleep(max(self.safety_config.min_frame_dt_s, frame.hold_sec))
+            initial_state = backend.get_state()
+            ensure_state_safe(initial_state, self.safety_config)
+            frames = _playback_frames(action, self.safety_config, list(initial_state.positions))
+            total = len(frames)
+            for frame in frames:
+                if stop_event.is_set():
+                    safe_message = _safe_return_home(backend, self.safety_config)
+                    return PlayResult(False, f"{action.title} 已停止，{safe_message}", sent)
+                if not backend.send_positions(frame.positions, speed=frame.speed):
+                    safe_message = _safe_return_home(backend, self.safety_config)
+                    return PlayResult(False, f"{action.title} 第 {sent + 1}/{total} 帧发送失败，{safe_message}", sent)
+                ensure_state_safe(backend.get_state(), self.safety_config)
+                if frame_callback is not None:
+                    frame_callback(list(frame.positions))
+                sent += 1
+                if progress_callback is not None:
+                    progress_callback(sent, total)
+                time.sleep(max(self.safety_config.min_frame_dt_s, frame.hold_sec))
         except SafetyStop as exc:
             safe_message = _safe_return_home(backend, self.safety_config)
             return PlayResult(False, f"{action.title} 保护停止：{exc}，{safe_message}", sent)

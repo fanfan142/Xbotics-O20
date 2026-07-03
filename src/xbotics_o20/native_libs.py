@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .config import PROJECT_ROOT, WORKSPACE_ROOT, resolve_project_path, resolve_resource_path
+from .config import PROJECT_ROOT, resolve_project_path, resolve_resource_path
 
 
 @dataclass(frozen=True)
@@ -34,12 +34,6 @@ def _sdk_roots(sdk_root: str | Path | None = None) -> list[Path]:
     if sdk_root:
         root = resolve_project_path(sdk_root)
         roots.append(root.parent if root.name == "linker_hand_o20_ros2" else root)
-    roots.extend(
-        [
-            WORKSPACE_ROOT / "action_generate_yx" / "linkerhand-o20-ros2",
-            WORKSPACE_ROOT / "linkerhand-o20-ros2",
-        ]
-    )
     unique: list[Path] = []
     seen: set[Path] = set()
     for root in roots:
