@@ -162,9 +162,9 @@ def test_main_window_moves_manual_control_to_left_and_removes_right_manual_tab(t
     tab_names = [window._right_tabs.tabText(index) for index in range(window._right_tabs.count())]
 
     assert hasattr(window, "_manual_panel")
-    assert tab_names == ["预设手势", "手势识别", "猜拳", "宏功能"]
+    assert tab_names == ["🤚 预设手势", "📷 手势识别", "✊ 猜拳", "🎬 宏功能"]
     assert "手动控制" not in tab_names
-    assert window._import_demo_btn.text() == "导入动作"
+    assert "导入动作" in window._import_demo_btn.text()
     assert window._control_badge.text() == "控制源：空闲"
     assert window._info_panel._summary["控制源"].text() == "空闲"
     assert window._backend_combo.currentText() == "直连模式"
@@ -236,7 +236,7 @@ def test_main_window_reads_state_in_background(tmp_path) -> None:
     assert window._latest_state is not None
     assert window._joint_editor.positions()[5] == 66
     assert "直连模式 / 右手" in window._backend_status.text()
-    assert window._read_btn.text() == "刷新读数"
+    assert "刷新读数" in window._read_btn.text()
     window.close()
     window.deleteLater()
 
@@ -259,7 +259,7 @@ def test_scan_environment_runs_in_background_and_saves_report(tmp_path, monkeypa
     window._scan_environment()
 
     assert _drain_events_until(lambda: window._scan_task is None)
-    assert window._scan_btn.text() == "设备诊断"
+    assert "设备诊断" in window._scan_btn.text()
     assert list((tmp_path / "diagnostics").glob("scan-*.txt"))
     assert list((tmp_path / "diagnostics").glob("scan-*.json"))
     assert "设备诊断报告已保存" in window._log.toPlainText()

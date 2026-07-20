@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QGraphicsDropShadowEffect,
     QSplitter,
     QTabWidget,
     QTableWidget,
@@ -81,7 +82,8 @@ except Exception:  # pragma: no cover - optional Qt component
 APP_STYLE = """
 /* ── 全局 ── */
 QMainWindow {
-    background: #f0f4f8;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #f0f4f8, stop:1 #e8ecf2);
 }
 QWidget {
     font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
@@ -98,6 +100,9 @@ QFrame#Card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
+}
+QFrame#Card:hover {
+    border-color: #cbd5e1;
 }
 QFrame#Toolbar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -229,8 +234,18 @@ QPushButton#Danger:pressed {
 }
 QPushButton#ActionButton {
     min-width: 92px;
-    min-height: 36px;
-    padding: 6px 10px;
+    min-height: 38px;
+    padding: 7px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+QPushButton#ActionButton:hover {
+    background: #ecfdf5;
+    border-color: #0d9488;
+    color: #0f766e;
+}
+QPushButton#ActionButton:pressed {
+    background: #ccfbf1;
 }
 QPushButton#ViewButton {
     min-width: 54px;
@@ -302,6 +317,7 @@ QTabBar::tab:selected {
     color: #0f766e;
     font-weight: 700;
     border-color: #e2e8f0;
+    border-bottom: 2px solid #0d9488;
 }
 
 /* ── 进度条 ── */
@@ -345,6 +361,9 @@ QSlider::sub-page:horizontal {
 /* ── 滚动区域 / 滚动条 ── */
 QScrollArea {
     border: none;
+    background: transparent;
+}
+QScrollArea > QWidget > QWidget {
     background: transparent;
 }
 QScrollBar:vertical {
@@ -394,6 +413,10 @@ QTableWidget {
     alternate-background-color: #f8fafc;
     selection-background-color: #ccfbf1;
     selection-color: #0f172a;
+    outline: none;
+}
+QTableWidget::item:hover {
+    background: #f0fdf4;
 }
 QHeaderView::section {
     background: #f1f5f9;
@@ -458,13 +481,13 @@ QMenu::item:selected {
 
 /* ── 分割器 ── */
 QSplitter::handle {
-    background: #e2e8f0;
-    width: 3px;
-    height: 3px;
-    border-radius: 1px;
+    background: #d8e0ea;
+    width: 4px;
+    height: 4px;
+    border-radius: 2px;
 }
 QSplitter::handle:hover {
-    background: #94a3b8;
+    background: #0d9488;
 }
 
 /* ── 工具提示 ── */
@@ -520,6 +543,15 @@ def _toolbar_separator() -> QFrame:
     sep.setStyleSheet("color: #d8e0ea; background: transparent;")
     sep.setFixedWidth(1)
     return sep
+
+
+def _add_card_shadow(widget: QWidget, blur: int = 18, offset: int = 2, opacity: float = 0.08) -> None:
+    """给卡片添加微妙投影，增强层次感。"""
+    shadow = QGraphicsDropShadowEffect(widget)
+    shadow.setBlurRadius(blur)
+    shadow.setOffset(0, offset)
+    shadow.setColor(QColor(0, 0, 0, int(255 * opacity)))
+    widget.setGraphicsEffect(shadow)
 
 
 def _format_values(values: list[float] | list[int] | None, suffix: str = "") -> str:
@@ -773,7 +805,7 @@ class InfoPanel(QFrame):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
         head = QHBoxLayout()
-        title = QLabel("实时读取")
+        title = QLabel("📊 实时读取")
         title.setObjectName("SectionTitle")
         head.addWidget(title)
         head.addStretch(1)
@@ -785,8 +817,8 @@ class InfoPanel(QFrame):
         self._summary: dict[str, QLabel] = {}
         summary = QGridLayout()
         summary.setColumnStretch(1, 1)
-        summary.setHorizontalSpacing(14)
-        summary.setVerticalSpacing(6)
+        summary.setHorizontalSpacing(16)
+        summary.setVerticalSpacing(8)
         for index, (key, value) in enumerate([
             ("连接", "未连接"),
             ("连接方式", "--"),
@@ -805,8 +837,14 @@ class InfoPanel(QFrame):
         self._telemetry.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self._telemetry.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._telemetry.setAlternatingRowColors(True)
-        self._telemetry.setMinimumHeight(260)
+        self._telemetry.setMinimumHeight(280)
         self._telemetry.setMinimumWidth(360)
+        self._telemetry.verticalHeader().setDefaultSectionSize(24)
+        self._telemetry.setStyleSheet(
+            self._telemetry.styleSheet() +
+            "QTableWidget { font-size: 12px; } "
+            "QTableWidget::item { padding: 2px 4px; }"
+        )
         self._telemetry.setColumnWidth(0, 42)
         self._telemetry.setColumnWidth(1, 116)
         self._telemetry.setColumnWidth(2, 64)
@@ -876,7 +914,7 @@ class ActionLibraryPanel(QFrame):
         self,
         on_action: Callable[[ActionDefinition], None],
         *,
-        title: str = "预设动作 / 动作库",
+        title: str = "🤚 预设动作 / 动作库",
         action_names: tuple[str, ...] | None = None,
         columns: int = 4,
     ) -> None:
@@ -1032,9 +1070,12 @@ class JointEditor(QWidget):
             if joint_index in group_starts:
                 group_label = QLabel(f"  {group_starts[joint_index]}")
                 group_label.setStyleSheet(
-                    "background: #f1f5f9; color: #334155; font-weight: 700; "
-                    "font-size: 12px; border-radius: 4px; padding: 3px 6px; "
-                    "margin-top: 4px;"
+                    "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+                    "stop:0 #e0f2fe, stop:1 #f0f9ff); "
+                    "color: #0369a1; font-weight: 700; "
+                    "font-size: 12px; border-radius: 5px; padding: 4px 8px; "
+                    "margin-top: 6px; margin-bottom: 2px; "
+                    "border-left: 3px solid #0ea5e9;"
                 )
                 layout.addWidget(group_label, grid_row, 0, 1, 4)
                 grid_row += 1
@@ -1274,16 +1315,16 @@ class UrdfTwinPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         head = QHBoxLayout()
-        title = QLabel("URDF 仿真模型")
+        title = QLabel("🦾 URDF 仿真模型")
         title.setObjectName("SectionTitle")
         head.addWidget(title)
         head.addStretch(1)
         self._view_buttons: dict[str, QPushButton] = {}
         for text, mode, tooltip in (
-            ("手背", "back", "切到手背视角"),
-            ("掌心", "palm", "切到掌心视角"),
-            ("侧面", "side", "切到侧面视角"),
-            ("复位", "reset", "恢复默认视角"),
+            ("🖐 手背", "back", "切到手背视角"),
+            ("✋ 掌心", "palm", "切到掌心视角"),
+            ("👈 侧面", "side", "切到侧面视角"),
+            ("🔄 复位", "reset", "恢复默认视角"),
         ):
             button = QPushButton(text)
             button.setObjectName("ViewButton")
@@ -1626,7 +1667,7 @@ class MacroPanel(_MacroQueueMixin, QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
-        title = QLabel("宏功能")
+        title = QLabel("🎬 宏功能")
         title.setObjectName("SectionTitle")
         layout.addWidget(title)
 
@@ -1891,13 +1932,13 @@ class RPSPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         head = QHBoxLayout()
-        title = QLabel("猜拳互动")
+        title = QLabel("✊ 猜拳互动")
         title.setObjectName("SectionTitle")
         head.addWidget(title)
         head.addStretch(1)
         self._score = QLabel("胜:0 负:0 平:0")
         head.addWidget(self._score)
-        self._start_btn = QPushButton("开始猜拳")
+        self._start_btn = QPushButton("✊ 开始猜拳")
         self._start_btn.setObjectName("Primary")
         self._start_btn.clicked.connect(self._toggle)
         head.addWidget(self._start_btn)
@@ -1969,7 +2010,7 @@ class RPSPanel(QFrame):
         self._thread.failed.connect(self._on_failed)
         self._thread.finished.connect(lambda task=self._thread: self._cleanup_thread(task))
         self._thread.start()
-        self._start_btn.setText("停止猜拳")
+        self._start_btn.setText("⏹ 停止猜拳")
         self._result.setText("识别中，保持手势稳定")
 
     def _stop_game(self) -> None:
@@ -1978,7 +2019,7 @@ class RPSPanel(QFrame):
             self._thread.quit()
             if self._thread.wait(800):
                 self._thread = None
-        self._start_btn.setText("开始猜拳")
+        self._start_btn.setText("✊ 开始猜拳")
 
     def _on_result(self, player: str, computer: str, outcome: str) -> None:
         self._losses += 1 if outcome == "你输了" else 0
@@ -1986,13 +2027,13 @@ class RPSPanel(QFrame):
         self._draws += 1 if outcome == "平局" else 0
         self._score.setText(f"胜:{self._wins} 负:{self._losses} 平:{self._draws}")
         self._result.setText(f"你出 {player}，O20 出 {computer}：{outcome}")
-        self._start_btn.setText("开始猜拳")
+        self._start_btn.setText("✊ 开始猜拳")
         action_name = RPS_COUNTER_ACTION.get(player, ("", ""))[1]
         if action_name:
             self._play_callback(action_name)
 
     def _on_failed(self, text: str) -> None:
-        self._start_btn.setText("开始猜拳")
+        self._start_btn.setText("✊ 开始猜拳")
         self._result.setText(text)
 
     def _cleanup_thread(self, task: RPSTask) -> None:
@@ -2044,14 +2085,16 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(10)
+        outer.setContentsMargins(14, 10, 14, 6)
+        outer.setSpacing(8)
 
         toolbar, toolbar_layout = _card()
         toolbar.setObjectName("Toolbar")
         toolbar.setMinimumHeight(66)
+        _add_card_shadow(toolbar, blur=12, offset=1, opacity=0.06)
         toolbar_layout.setDirection(QBoxLayout.Direction.LeftToRight)
-        toolbar_layout.setSpacing(8)
+        toolbar_layout.setSpacing(6)
+        toolbar_layout.setContentsMargins(12, 8, 12, 8)
         self._backend_combo = QComboBox()
         _populate_combo(self._backend_combo, BACKEND_OPTIONS, self._config.o20.backend)
         self._side_combo = QComboBox()
@@ -2062,21 +2105,21 @@ class MainWindow(QMainWindow):
         self._speed_spin = QSpinBox()
         self._speed_spin.setRange(0, 130)
         self._speed_spin.setValue(self._config.o20.default_speed)
-        self._connect_btn = QPushButton("连接")
+        self._connect_btn = QPushButton("🔌 连接")
         self._connect_btn.setObjectName("Primary")
         self._connect_btn.clicked.connect(self._connect_backend)
-        self._settings_btn = QPushButton("设置")
+        self._settings_btn = QPushButton("⚙ 设置")
         self._settings_btn.clicked.connect(self._show_settings)
-        self._import_demo_btn = QPushButton("导入动作")
+        self._import_demo_btn = QPushButton("📂 导入动作")
         self._import_demo_btn.setToolTip("从 txt 动作目录导入到当前动作库")
         self._import_demo_btn.clicked.connect(self._import_txt_actions)
-        self._macro_btn = QPushButton("宏功能")
+        self._macro_btn = QPushButton("🎬 宏功能")
         self._macro_btn.clicked.connect(self._show_macro_dialog)
-        self._read_btn = QPushButton("刷新读数")
+        self._read_btn = QPushButton("🔄 刷新读数")
         self._read_btn.clicked.connect(self._refresh_state)
-        self._scan_btn = QPushButton("设备诊断")
+        self._scan_btn = QPushButton("🔍 设备诊断")
         self._scan_btn.clicked.connect(self._scan_environment)
-        self._stop_btn = QPushButton("停止")
+        self._stop_btn = QPushButton("⛔ 停止")
         self._stop_btn.setObjectName("Danger")
         self._stop_btn.clicked.connect(self._request_stop)
         self._status_dot = QLabel("●")
@@ -2129,6 +2172,7 @@ class MainWindow(QMainWindow):
 
         left_middle = QSplitter(Qt.Orientation.Horizontal)
         self._info_panel = InfoPanel()
+        _add_card_shadow(self._info_panel)
         self._manual_panel = self._build_manual_tab()
         self._manual_panel.setMinimumWidth(430)
         left_middle.addWidget(self._info_panel)
@@ -2158,10 +2202,10 @@ class MainWindow(QMainWindow):
         self._macro_panel = MacroPanel(self._execute_macro)
         self._camera_preview.set_mirror(self._config.camera.mirror)
         self._rps_panel.set_mirror(self._config.camera.mirror)
-        right_tabs.addTab(self._action_panel, "预设手势")
-        right_tabs.addTab(self._camera_preview, "手势识别")
-        right_tabs.addTab(self._rps_panel, "猜拳")
-        right_tabs.addTab(self._macro_panel, "宏功能")
+        right_tabs.addTab(self._action_panel, "🤚 预设手势")
+        right_tabs.addTab(self._camera_preview, "📷 手势识别")
+        right_tabs.addTab(self._rps_panel, "✊ 猜拳")
+        right_tabs.addTab(self._macro_panel, "🎬 宏功能")
         right_layout.addWidget(right_tabs, 1)
         splitter.addWidget(right)
         splitter.setSizes([900, 500])
@@ -2194,10 +2238,10 @@ class MainWindow(QMainWindow):
         self._urdf_twin = UrdfTwinPanel(side=self._config.o20.side)
         self._twin = O20TwinWidget()
         self._twin.set_side(self._config.o20.side)
-        visual_tabs.addTab(self._urdf_twin, "URDF 模型")
-        visual_tabs.addTab(self._twin, "姿态视图")
+        visual_tabs.addTab(self._urdf_twin, " URDF 模型")
+        visual_tabs.addTab(self._twin, "✋ 姿态视图")
         layout.addWidget(visual_tabs, 1)
-        panel, panel_layout = _card("20 位姿态数据")
+        panel, panel_layout = _card("📐 20 位姿态数据")
         self._public20_text = QTextEdit()
         self._public20_text.setReadOnly(True)
         self._public20_text.setMaximumHeight(92)
@@ -2207,14 +2251,15 @@ class MainWindow(QMainWindow):
         return tab
 
     def _build_log_panel(self) -> QWidget:
-        panel, layout = _card("运行日志")
+        panel, layout = _card("📝 运行日志")
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setMinimumHeight(180)
         self._log.setStyleSheet(
             "QTextEdit { font-family: 'Cascadia Code', 'Consolas', 'Microsoft YaHei UI', monospace; "
-            "font-size: 12px; background: #fafcfe; color: #334155; "
-            "border: 1px solid #e8edf3; border-radius: 6px; padding: 8px; }"
+            "font-size: 13px; background: #fafcfe; color: #334155; "
+            "border: 1px solid #e8edf3; border-radius: 8px; padding: 10px; "
+            "line-height: 1.5; }"
         )
         layout.addWidget(self._log, 1)
         return panel
@@ -2224,14 +2269,14 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(tab)
         controls, controls_layout = _card()
         controls_layout.setDirection(QBoxLayout.Direction.LeftToRight)
-        self._home_btn = QPushButton("回初始")
+        self._home_btn = QPushButton("🏠 回初始")
         self._home_btn.clicked.connect(lambda: self._joint_editor.set_positions(HOME_POSITIONS))
-        self._send_pose_btn = QPushButton("发送当前姿态")
+        self._send_pose_btn = QPushButton("📤 发送当前姿态")
         self._send_pose_btn.setObjectName("Primary")
         self._send_pose_btn.clicked.connect(self._send_current_pose)
-        self._copy20_btn = QPushButton("复制 20 位数据")
+        self._copy20_btn = QPushButton("📋 复制 20 位数据")
         self._copy20_btn.clicked.connect(self._copy_public20)
-        self._save_pose_btn = QPushButton("保存为动作")
+        self._save_pose_btn = QPushButton("💾 保存为动作")
         self._save_pose_btn.clicked.connect(self._save_current_pose_as_action)
         self._manual_live_check = QCheckBox("实时发送")
         self._manual_live_check.setToolTip("开启后，手动拖动滑块会按当前速度下发；刷新读数同步滑块时不会自动下发。")
@@ -2258,6 +2303,7 @@ class MainWindow(QMainWindow):
         camera_bar, camera_layout = _card()
         camera_bar.setObjectName("CameraBar")
         camera_bar.setMinimumHeight(96)
+        _add_card_shadow(camera_bar, blur=12, offset=1, opacity=0.06)
         camera_layout.setSpacing(6)
 
         controls = QWidget()
@@ -2277,7 +2323,7 @@ class MainWindow(QMainWindow):
         self._teleop_check = QCheckBox("手势遥控")
         self._teleop_check.stateChanged.connect(self._on_teleop_toggle)
         controls_layout.addWidget(self._teleop_check)
-        self._camera_toggle_btn = QPushButton("启动摄像头")
+        self._camera_toggle_btn = QPushButton("📷 启动摄像头")
         self._camera_toggle_btn.setObjectName("Primary")
         self._camera_toggle_btn.setMinimumWidth(108)
         self._camera_toggle_btn.clicked.connect(self._toggle_camera)
@@ -2434,7 +2480,7 @@ class MainWindow(QMainWindow):
         self._backend = build_backend(self._config.o20)
         self._set_backend_status("连接中...", ok=True)
         self._connect_btn.setEnabled(False)
-        self._connect_btn.setText("连接中")
+        self._connect_btn.setText("⏳ 连接中")
         self._connect_task = ConnectTask(self._backend)
         self._connect_task.finished_result.connect(self._on_connect_finished)
         self._connect_task.start()
@@ -2444,13 +2490,13 @@ class MainWindow(QMainWindow):
             return
         self._connect_btn.setEnabled(True)
         if ok:
-            self._connect_btn.setText("断开")
+            self._connect_btn.setText("🔌 断开")
             self._info_panel.set_status("设备连接成功", ok=True)
             self._log_line("设备连接成功")
             self._refresh_state()
             self._set_backend_status(f"已连接：{_backend_label(self._config.o20.backend)} / {_side_label(self._config.o20.side)}", ok=True)
         else:
-            self._connect_btn.setText("连接")
+            self._connect_btn.setText("🔌 连接")
             self._set_backend_status(f"连接失败：{error or '未知错误'}", ok=False)
             self._info_panel.set_status(f"连接失败：{error or '未知错误'}", ok=False)
             self._log_line(f"连接失败：{error or '未知错误'}")
@@ -2492,7 +2538,7 @@ class MainWindow(QMainWindow):
         self._set_control_source("idle", "空闲")
         self._last_sent_positions = None
         self._connect_btn.setEnabled(True)
-        self._connect_btn.setText("连接")
+        self._connect_btn.setText("🔌 连接")
         self._set_backend_status("未连接", ok=True)
         self._update_manual_editor_mode()
         if log:
@@ -2936,7 +2982,7 @@ class MainWindow(QMainWindow):
         if self._state_task is not None and self._state_task.isRunning():
             return
         self._read_btn.setEnabled(False)
-        self._read_btn.setText("刷新中")
+        self._read_btn.setText("⏳ 刷新中")
         task = StateReadTask(self._backend)
         self._state_task = task
         task.finished_state.connect(self._on_state_ready)
@@ -3130,7 +3176,7 @@ class MainWindow(QMainWindow):
         self._camera_thread = CameraThread(self._camera_service, mirrored=self._config.camera.mirror)
         self._camera_thread.frame_ready.connect(self._on_camera_frame)
         self._camera_thread.start()
-        self._camera_toggle_btn.setText("停止摄像头")
+        self._camera_toggle_btn.setText("⏹ 停止摄像头")
         self._camera_index_spin.setEnabled(False)
         if self._camera_service.last_error:
             self._set_camera_status(f"状态：运行中，识别不可用（{self._camera_service.last_error}）")
@@ -3147,7 +3193,7 @@ class MainWindow(QMainWindow):
         if self._camera_service is not None:
             self._camera_service.stop()
         self._camera_service = None
-        self._camera_toggle_btn.setText("启动摄像头")
+        self._camera_toggle_btn.setText("📷 启动摄像头")
         self._camera_index_spin.setEnabled(True)
         self._set_camera_status("状态：未启动")
         self._teleop_last_pose = None
