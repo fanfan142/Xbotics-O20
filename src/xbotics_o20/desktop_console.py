@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -1307,9 +1307,15 @@ class UrdfTwinPanel(QFrame):
         html = self._render_html()
         if html is None:
             self._status.setText("URDF 资源缺失")
-            fallback = QLabel("未找到 URDF/STL 资源，请检查 resources/urdf/model。")
+            fallback = QLabel("未找到 URDF/STL 资源\n请检查 resources/urdf/model 目录")
             fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            fallback.setStyleSheet("background: #eef3f7; border: 1px solid #d6e0ea; border-radius: 8px; color: #657385;")
+            fallback.setWordWrap(True)
+            fallback.setStyleSheet(
+                "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+                "stop:0 #fef3c7, stop:1 #fde68a); "
+                "border: 1px solid #f59e0b; border-radius: 10px; "
+                "color: #92400e; font-size: 14px; padding: 24px;"
+            )
             layout.addWidget(fallback, 1)
             return
 
@@ -1682,10 +1688,15 @@ class SettingsDialog(QDialog):
     def __init__(self, parent: QWidget, config: AppConfig) -> None:
         super().__init__(parent)
         self.setWindowTitle("设备设置")
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(580)
         self._config = copy.deepcopy(config)
 
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        conn_header = QLabel("连接参数")
+        conn_header.setObjectName("SectionTitle")
+        layout.addWidget(conn_header)
         conn = QFormLayout()
         self._backend = QComboBox()
         _populate_combo(self._backend, BACKEND_OPTIONS, config.o20.backend)
@@ -1705,6 +1716,9 @@ class SettingsDialog(QDialog):
         conn.addRow("默认速度", self._speed)
         layout.addLayout(conn)
 
+        safety_header = QLabel("安全防护")
+        safety_header.setObjectName("SectionTitle")
+        layout.addWidget(safety_header)
         safety = QFormLayout()
         self._clamp = QCheckBox("启用逐帧步长保护")
         self._clamp.setChecked(config.safety.clamp_positions)
@@ -1750,6 +1764,9 @@ class SettingsDialog(QDialog):
         safety.addRow("回初始速度", self._return_home_speed)
         layout.addLayout(safety)
 
+        camera_header = QLabel("摄像头 / 手势识别")
+        camera_header.setObjectName("SectionTitle")
+        layout.addWidget(camera_header)
         camera = QFormLayout()
         self._camera_index = QSpinBox()
         self._camera_index.setRange(0, 16)
@@ -2062,6 +2079,9 @@ class MainWindow(QMainWindow):
         self._stop_btn = QPushButton("停止")
         self._stop_btn.setObjectName("Danger")
         self._stop_btn.clicked.connect(self._request_stop)
+        self._status_dot = QLabel("●")
+        self._status_dot.setStyleSheet("color: #94a3b8; font-size: 16px; background: transparent;")
+        self._status_dot.setToolTip("设备连接状态")
         self._backend_status = QLabel()
         self._backend_status.setObjectName("StatusOk")
         self._control_badge = QLabel("控制源：空闲")
@@ -2094,6 +2114,7 @@ class MainWindow(QMainWindow):
         toolbar_layout.addWidget(self._stop_btn)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._control_badge)
+        toolbar_layout.addWidget(self._status_dot)
         toolbar_layout.addWidget(self._backend_status)
         outer.addWidget(toolbar)
 
@@ -2159,6 +2180,12 @@ class MainWindow(QMainWindow):
             "color: #64748b; font-size: 12px; padding: 2px 8px; }"
         )
         status_bar.showMessage(f"Xbotics O20 控制台 v{__version__}  |  就绪")
+
+        # 全局快捷键
+        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
+        QShortcut(QKeySequence("Ctrl+,"), self, activated=self._show_settings)
+        QShortcut(QKeySequence("Ctrl+R"), self, activated=self._refresh_state)
+        QShortcut(QKeySequence("Escape"), self, activated=lambda: self._request_stop(log=True))
 
     def _build_twin_tab(self) -> QWidget:
         tab = QWidget()
@@ -3211,6 +3238,12 @@ class MainWindow(QMainWindow):
         self._backend_status.style().unpolish(self._backend_status)
         self._backend_status.style().polish(self._backend_status)
         self._backend_status.setText(f"设备：{text}")
+        if hasattr(self, "_status_dot"):
+            connected = self._backend is not None and self._backend.is_connected
+            color = "#10b981" if connected else ("#f59e0b" if "连接中" in text else "#94a3b8")
+            if not ok and "失败" in text:
+                color = "#ef4444"
+            self._status_dot.setStyleSheet(f"color: {color}; font-size: 16px; background: transparent;")
 
     def _log_line(self, text: str) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")

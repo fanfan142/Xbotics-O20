@@ -5,59 +5,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .canfd_driver import NativeCanfdBus
+from .canfd_driver import (
+    DLC_TO_LEN,
+    SIDE_DEVICE_IDS,
+    STATUS_OK,
+    CanFDConfig,
+    CanFDMsg,
+    DevInfo,
+    NativeCanfdBus,
+    create_frame_id,
+    decode_frame_id,
+)
 from .native_libs import ensure_canfd_native_libraries
 from .process_lock import CanfdProcessLock
 
 
-STATUS_OK = 0
 REGISTER_DEVICE_INFO = 0x00
-DLC_TO_LEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64]
-SIDE_DEVICE_IDS = {"right": 0x01, "left": 0x02}
-
-
-class CanFDConfig(ctypes.Structure):
-    _fields_ = [
-        ("NomBaud", ctypes.c_uint),
-        ("DatBaud", ctypes.c_uint),
-        ("NomPres", ctypes.c_ushort),
-        ("NomTseg1", ctypes.c_char),
-        ("NomTseg2", ctypes.c_char),
-        ("NomSJW", ctypes.c_char),
-        ("DatPres", ctypes.c_char),
-        ("DatTseg1", ctypes.c_char),
-        ("DatTseg2", ctypes.c_char),
-        ("DatSJW", ctypes.c_char),
-        ("Config", ctypes.c_char),
-        ("Model", ctypes.c_char),
-        ("Cantype", ctypes.c_char),
-    ]
-
-
-class CanFDMsg(ctypes.Structure):
-    _fields_ = [
-        ("ID", ctypes.c_uint),
-        ("TimeStamp", ctypes.c_uint),
-        ("FrameType", ctypes.c_ubyte),
-        ("DLC", ctypes.c_ubyte),
-        ("ExternFlag", ctypes.c_ubyte),
-        ("RemoteFlag", ctypes.c_ubyte),
-        ("BusSatus", ctypes.c_ubyte),
-        ("ErrSatus", ctypes.c_ubyte),
-        ("TECounter", ctypes.c_ubyte),
-        ("RECounter", ctypes.c_ubyte),
-        ("Data", ctypes.c_ubyte * 64),
-    ]
-
-
-class DevInfo(ctypes.Structure):
-    _fields_ = [
-        ("HW_Type", ctypes.c_char * 32),
-        ("HW_Ser", ctypes.c_char * 32),
-        ("HW_Ver", ctypes.c_char * 32),
-        ("FW_Ver", ctypes.c_char * 32),
-        ("MF_Date", ctypes.c_char * 32),
-    ]
 
 
 @dataclass(frozen=True)
@@ -80,14 +43,6 @@ class CanFdFrame:
             "data_length": self.data_length,
             "data_hex": self.data_hex,
         }
-
-
-def create_frame_id(device_id: int, register_addr: int, is_write: bool) -> int:
-    return (int(device_id) << 21) | (int(register_addr) << 13) | ((1 if is_write else 0) << 12)
-
-
-def decode_frame_id(frame_id: int) -> tuple[int, int, bool]:
-    return (frame_id >> 21) & 0xFF, (frame_id >> 13) & 0xFF, bool((frame_id >> 12) & 0x1)
 
 
 def _decode_bytes(value: bytes) -> str:
