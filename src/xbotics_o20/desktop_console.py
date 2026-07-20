@@ -5,6 +5,7 @@ import copy
 import json
 import threading
 import time
+import math
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -78,58 +79,73 @@ except Exception:  # pragma: no cover - optional Qt component
 
 
 APP_STYLE = """
+/* ── 全局 ── */
 QMainWindow {
-    background: #f3f6fb;
+    background: #f0f4f8;
 }
 QWidget {
-    font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
-    background: #f3f6fb;
-    color: #0f172a;
+    font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
+    background: #f0f4f8;
+    color: #1e293b;
     font-size: 13px;
 }
 QWidget#Transparent {
     background: transparent;
 }
+
+/* ── 卡片 / 工具栏 ── */
 QFrame#Card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    border-radius: 10px;
 }
-QFrame#Toolbar, QFrame#CameraBar {
+QFrame#Toolbar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #ffffff, stop:1 #f8fafc);
+    border: 1px solid #dbe3eb;
+    border-radius: 10px;
+}
+QFrame#CameraBar {
     background: #ffffff;
     border: 1px solid #dbe3eb;
-    border-radius: 8px;
+    border-radius: 10px;
 }
+
+/* ── 文字标签 ── */
 QLabel#SectionTitle {
     background: transparent;
     color: #0f172a;
     font-size: 15px;
     font-weight: 700;
+    letter-spacing: 0.3px;
 }
 QLabel#Subtle {
     background: transparent;
     color: #64748b;
+    font-size: 12px;
 }
 QLabel#MetricValue {
     background: transparent;
-    color: #0f172a;
+    color: #1e293b;
     font-weight: 700;
 }
 QLabel#Badge {
-    background: #e6f4f1;
-    color: #0f766e;
-    border: 1px solid #99d6cd;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
     border-radius: 6px;
-    padding: 5px 9px;
+    padding: 5px 10px;
     font-weight: 700;
+    font-size: 12px;
 }
 QLabel#BadgeMuted {
     background: #f1f5f9;
     color: #475569;
     border: 1px solid #d8e0ea;
     border-radius: 6px;
-    padding: 5px 9px;
+    padding: 5px 10px;
     font-weight: 700;
+    font-size: 12px;
 }
 QLabel#JointMeta {
     background: transparent;
@@ -137,17 +153,17 @@ QLabel#JointMeta {
     font-size: 12px;
 }
 QLabel#JointMetaAccent {
-    background: #eefaf8;
-    color: #0f766e;
-    border: 1px solid #b7ddd7;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
     border-radius: 6px;
-    padding: 2px 6px;
+    padding: 2px 7px;
     font-size: 12px;
     font-weight: 700;
 }
 QLabel#StatusOk {
     background: transparent;
-    color: #0f766e;
+    color: #047857;
     font-weight: 700;
 }
 QLabel#StatusBad {
@@ -155,26 +171,61 @@ QLabel#StatusBad {
     color: #dc2626;
     font-weight: 700;
 }
+
+/* ── 按钮 ── */
 QPushButton {
     background: #ffffff;
-    color: #0f172a;
+    color: #1e293b;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
-    padding: 8px 13px;
+    padding: 8px 14px;
+    font-weight: 500;
 }
-QPushButton:hover { background: #f1f5f9; border-color: #94a3b8; }
-QPushButton:pressed { background: #e2e8f0; }
-QPushButton:disabled { background: #e2e8f0; color: #94a3b8; }
+QPushButton:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+QPushButton:pressed {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+}
+QPushButton:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
 QPushButton#Primary {
-    background: #0f766e;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #0d9488, stop:1 #0f766e);
     color: #ffffff;
-    border-color: #0f766e;
+    border: 1px solid #0f766e;
     font-weight: 700;
 }
+QPushButton#Primary:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #14b8a6, stop:1 #0d9488);
+    border-color: #0d9488;
+}
+QPushButton#Primary:pressed {
+    background: #0f766e;
+}
+QPushButton#Primary:disabled {
+    background: #94a3b8;
+    border-color: #94a3b8;
+    color: #e2e8f0;
+}
 QPushButton#Danger {
-    background: #fff7f7;
-    color: #9f1239;
-    border-color: #fecdd3;
+    background: #fff1f2;
+    color: #be123c;
+    border: 1px solid #fecdd3;
+    font-weight: 700;
+}
+QPushButton#Danger:hover {
+    background: #ffe4e6;
+    border-color: #fda4af;
+}
+QPushButton#Danger:pressed {
+    background: #fecdd3;
 }
 QPushButton#ActionButton {
     min-width: 92px;
@@ -185,40 +236,90 @@ QPushButton#ViewButton {
     min-width: 54px;
     min-height: 28px;
     padding: 4px 8px;
+    font-size: 12px;
 }
-QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QTextEdit, QListWidget, QTableWidget {
+
+/* ── 输入控件 ── */
+QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit {
     background: #ffffff;
-    color: #0f172a;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    padding: 5px 8px;
+    selection-background-color: #99f6e4;
+}
+QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus {
+    border-color: #0d9488;
+}
+QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover {
+    border-color: #94a3b8;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+QComboBox QAbstractItemView {
+    background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
+    selection-background-color: #ccfbf1;
+    selection-color: #0f172a;
+    padding: 2px;
+}
+QTextEdit, QListWidget, QTableWidget {
+    background: #ffffff;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
     padding: 5px;
 }
+QTextEdit:focus, QListWidget:focus, QTableWidget:focus {
+    border-color: #0d9488;
+}
+
+/* ── 选项卡 ── */
 QTabWidget::pane {
     border: 1px solid #e2e8f0;
     background: #ffffff;
+    border-radius: 0 0 8px 8px;
 }
 QTabBar::tab {
-    background: #e2e8f0;
-    color: #334155;
-    padding: 8px 16px;
+    background: #e8edf3;
+    color: #475569;
+    padding: 9px 18px;
     border: 1px solid #cbd5e1;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    margin-right: 2px;
+    font-weight: 500;
+}
+QTabBar::tab:hover {
+    background: #f1f5f9;
+    color: #1e293b;
 }
 QTabBar::tab:selected {
     background: #ffffff;
-    color: #0f172a;
+    color: #0f766e;
+    font-weight: 700;
+    border-color: #e2e8f0;
 }
+
+/* ── 进度条 ── */
 QProgressBar {
     background: #e2e8f0;
-    border: 1px solid #cbd5e1;
+    border: none;
     border-radius: 6px;
-    height: 12px;
+    height: 10px;
     text-align: center;
     color: transparent;
 }
 QProgressBar::chunk {
-    background: #0f766e;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #0d9488, stop:1 #14b8a6);
     border-radius: 5px;
 }
+
+/* ── 滑块 ── */
 QSlider::groove:horizontal {
     height: 5px;
     background: #d4dde8;
@@ -226,27 +327,154 @@ QSlider::groove:horizontal {
 }
 QSlider::handle:horizontal {
     width: 16px;
-    margin: -5px 0;
+    margin: -6px 0;
     border-radius: 8px;
-    background: #0f766e;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #14b8a6, stop:1 #0f766e);
+    border: 2px solid #ffffff;
 }
+QSlider::handle:horizontal:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #2dd4bf, stop:1 #0d9488);
+}
+QSlider::sub-page:horizontal {
+    background: #99f6e4;
+    border-radius: 2px;
+}
+
+/* ── 滚动区域 / 滚动条 ── */
 QScrollArea {
     border: none;
     background: transparent;
 }
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: #c1cdd9;
+    border-radius: 4px;
+    min-height: 32px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #94a3b8;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 0;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal {
+    background: #c1cdd9;
+    border-radius: 4px;
+    min-width: 32px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #94a3b8;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
+
+/* ── 表格 ── */
 QTableWidget {
-    gridline-color: #e2e8f0;
-    alternate-background-color: #f7fafc;
-    selection-background-color: #dbeafe;
+    gridline-color: #eef2f7;
+    alternate-background-color: #f8fafc;
+    selection-background-color: #ccfbf1;
+    selection-color: #0f172a;
 }
 QHeaderView::section {
-    background: #eef2f7;
+    background: #f1f5f9;
     color: #334155;
     border: 0;
-    border-right: 1px solid #dbe3eb;
-    border-bottom: 1px solid #dbe3eb;
-    padding: 5px 6px;
+    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 6px 8px;
     font-weight: 700;
+    font-size: 12px;
+}
+
+/* ── 复选框 ── */
+QCheckBox {
+    spacing: 6px;
+    background: transparent;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #ffffff;
+}
+QCheckBox::indicator:checked {
+    background: #0d9488;
+    border-color: #0d9488;
+}
+QCheckBox::indicator:hover {
+    border-color: #0d9488;
+}
+
+/* ── 对话框 ── */
+QDialog {
+    background: #f8fafc;
+}
+QMessageBox {
+    background: #f8fafc;
+}
+
+/* ── 菜单栏 ── */
+QMenuBar {
+    background: #f8fafc;
+    color: #334155;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 2px 0;
+}
+QMenuBar::item:selected {
+    background: #e2e8f0;
+    border-radius: 4px;
+}
+QMenu {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px;
+}
+QMenu::item:selected {
+    background: #ccfbf1;
+    border-radius: 4px;
+}
+
+/* ── 分割器 ── */
+QSplitter::handle {
+    background: #e2e8f0;
+    width: 3px;
+    height: 3px;
+    border-radius: 1px;
+}
+QSplitter::handle:hover {
+    background: #94a3b8;
+}
+
+/* ── 工具提示 ── */
+QToolTip {
+    background: #1e293b;
+    color: #f1f5f9;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
 }
 """
 
@@ -277,13 +505,21 @@ def _card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
     frame = QFrame()
     frame.setObjectName("Card")
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(12, 12, 12, 12)
+    layout.setContentsMargins(14, 14, 14, 14)
     layout.setSpacing(8)
     if title:
         label = QLabel(title)
         label.setObjectName("SectionTitle")
         layout.addWidget(label)
     return frame, layout
+
+
+def _toolbar_separator() -> QFrame:
+    sep = QFrame()
+    sep.setFrameShape(QFrame.Shape.VLine)
+    sep.setStyleSheet("color: #d8e0ea; background: transparent;")
+    sep.setFixedWidth(1)
+    return sep
 
 
 def _format_values(values: list[float] | list[int] | None, suffix: str = "") -> str:
@@ -767,6 +1003,15 @@ class ActionLibraryPanel(QFrame):
 class JointEditor(QWidget):
     changed = Signal(list)
 
+    # 手指分组：(组名, 起始关节索引)
+    _FINGER_GROUPS = (
+        ("拇指", 0),
+        ("食指", 4),
+        ("中指", 7),
+        ("无名指", 10),
+        ("小指", 13),
+    )
+
     def __init__(self) -> None:
         super().__init__()
         self._sliders: list[QSlider] = []
@@ -776,7 +1021,24 @@ class JointEditor(QWidget):
 
         layout = QGridLayout(self)
         layout.setColumnStretch(1, 1)
-        for row, joint in enumerate(JOINTS):
+        layout.setHorizontalSpacing(8)
+        layout.setVerticalSpacing(4)
+
+        # 构建关节索引 -> 组名的映射
+        group_starts = {start: name for name, start in self._FINGER_GROUPS}
+        grid_row = 0
+        for joint_index, joint in enumerate(JOINTS):
+            # 插入手指分组标题
+            if joint_index in group_starts:
+                group_label = QLabel(f"  {group_starts[joint_index]}")
+                group_label.setStyleSheet(
+                    "background: #f1f5f9; color: #334155; font-weight: 700; "
+                    "font-size: 12px; border-radius: 4px; padding: 3px 6px; "
+                    "margin-top: 4px;"
+                )
+                layout.addWidget(group_label, grid_row, 0, 1, 4)
+                grid_row += 1
+
             label = QLabel(f"{joint.index + 1:02d} {joint.name}")
             label.setMinimumWidth(96)
             label.setToolTip(f"{joint.name}：{_joint_meta_label(joint)}")
@@ -793,15 +1055,16 @@ class JointEditor(QWidget):
             meta.setMinimumWidth(132)
             meta.setObjectName("JointMetaAccent" if joint.key.endswith("_abd") else "JointMeta")
             meta.setToolTip("该关节的运动范围和初始位置")
-            slider.valueChanged.connect(lambda value, index=row: self._slider_changed(index, value))
-            spin.valueChanged.connect(lambda value, index=row: self._spin_changed(index, value))
-            layout.addWidget(label, row, 0)
-            layout.addWidget(slider, row, 1)
-            layout.addWidget(spin, row, 2)
-            layout.addWidget(meta, row, 3)
+            slider.valueChanged.connect(lambda value, index=joint_index: self._slider_changed(index, value))
+            spin.valueChanged.connect(lambda value, index=joint_index: self._spin_changed(index, value))
+            layout.addWidget(label, grid_row, 0)
+            layout.addWidget(slider, grid_row, 1)
+            layout.addWidget(spin, grid_row, 2)
+            layout.addWidget(meta, grid_row, 3)
             self._sliders.append(slider)
             self._spins.append(spin)
             self._meta_labels.append(meta)
+            grid_row += 1
         self.set_positions(HOME_POSITIONS)
 
     def positions(self) -> list[float]:
@@ -861,8 +1124,16 @@ class O20TwinWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
-        painter.fillRect(rect, QColor("#eef3f7"))
-        painter.setPen(QPen(QColor("#cbd6e2"), 1))
+
+        # 渐变背景
+        from PySide6.QtGui import QLinearGradient
+        bg_grad = QLinearGradient(0, 0, 0, rect.height())
+        bg_grad.setColorAt(0.0, QColor("#e8eef5"))
+        bg_grad.setColorAt(1.0, QColor("#dde5ee"))
+        painter.fillRect(rect, bg_grad)
+
+        # 细网格
+        painter.setPen(QPen(QColor("#c8d4e0"), 1, Qt.PenStyle.DotLine))
         for i in range(0, rect.width(), 36):
             painter.drawLine(i, 0, i, rect.height())
         for j in range(0, rect.height(), 36):
@@ -875,17 +1146,28 @@ class O20TwinWidget(QWidget):
         painter.translate(cx, cy)
         painter.scale(scale, scale)
 
-        painter.setBrush(QColor("#f4d2b8"))
-        painter.setPen(QPen(QColor("#986b55"), 2))
-        painter.drawRoundedRect(QRectF(-86, -120, 172, 170), 28, 28)
-        painter.setBrush(QColor("#d8e6ef"))
-        painter.drawRoundedRect(QRectF(-52, 34, 104, 80), 20, 20)
+        # 手掌 - 渐变填充
+        from PySide6.QtGui import QRadialGradient
+        palm_grad = QRadialGradient(0, -30, 140)
+        palm_grad.setColorAt(0.0, QColor("#f8dcc4"))
+        palm_grad.setColorAt(1.0, QColor("#eebd9e"))
+        painter.setBrush(palm_grad)
+        painter.setPen(QPen(QColor("#b07d5a"), 2))
+        painter.drawRoundedRect(QRectF(-86, -120, 172, 170), 30, 30)
+
+        # 腕部
+        wrist_grad = QLinearGradient(0, 34, 0, 114)
+        wrist_grad.setColorAt(0.0, QColor("#d0dfea"))
+        wrist_grad.setColorAt(1.0, QColor("#b8cdd9"))
+        painter.setBrush(wrist_grad)
+        painter.setPen(QPen(QColor("#8fa8ba"), 2))
+        painter.drawRoundedRect(QRectF(-52, 34, 104, 80), 22, 22)
 
         finger_specs = [
-            ("小指", 13, QPointF(72, -106), -78, 58, 43, 31, QColor("#d76d77")),
-            ("无名", 10, QPointF(36, -126), -88, 72, 50, 36, QColor("#d89a58")),
-            ("中指", 7, QPointF(0, -134), -92, 82, 56, 40, QColor("#d3b14d")),
-            ("食指", 4, QPointF(-38, -126), -102, 75, 52, 37, QColor("#51a3a3")),
+            ("小指", 13, QPointF(72, -106), -78, 58, 43, 31, QColor("#e06070")),
+            ("无名", 10, QPointF(36, -126), -88, 72, 50, 36, QColor("#e09050")),
+            ("中指", 7, QPointF(0, -134), -92, 82, 56, 40, QColor("#d4b040")),
+            ("食指", 4, QPointF(-38, -126), -102, 75, 52, 37, QColor("#40a0a0")),
         ]
         for name, start_index, base, base_angle, l1, l2, l3, color in finger_specs:
             abd = self._positions[start_index]
@@ -898,14 +1180,21 @@ class O20TwinWidget(QWidget):
         thumb_angle = -168 + (self._positions[2] - 90) * 0.22
         thumb_bend = self._positions[0]
         thumb_tip = self._positions[1]
-        self._draw_finger(painter, "拇指", thumb_base, self._mirror_angle(thumb_angle), thumb_bend, thumb_tip, 54, 42, 32, QColor("#7c8fd6"))
+        self._draw_finger(painter, "拇指", thumb_base, self._mirror_angle(thumb_angle), thumb_bend, thumb_tip, 54, 42, 32, QColor("#7080d0"))
 
         painter.restore()
 
-        painter.setPen(QColor("#243447"))
-        painter.setFont(self.font())
+        # 标题文字
+        painter.setPen(QColor("#1e3044"))
+        font = self.font()
+        font.setPointSize(font.pointSize() + 1)
+        font.setBold(True)
+        painter.setFont(font)
         painter.drawText(16, 26, f"O20 数字孪生 | {_side_label(self._side)}")
-        painter.setPen(QColor("#66778a"))
+        font.setBold(False)
+        font.setPointSize(font.pointSize() - 1)
+        painter.setFont(font)
+        painter.setPen(QColor("#5a7089"))
         painter.drawText(16, 48, "16 关节实时姿态")
 
     def _mirror_point(self, point: QPointF) -> QPointF:
@@ -937,26 +1226,39 @@ class O20TwinWidget(QWidget):
             rad = angle * 3.1415926 / 180.0
             prev = points[-1]
             points.append(QPointF(prev.x() + length * math_cos(rad), prev.y() + length * math_sin(rad)))
-        painter.setPen(QPen(color.darker(135), 13, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        # 指段 - 粗圆线段
+        painter.setPen(QPen(color.darker(125), 14, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         for start, end in zip(points, points[1:]):
             painter.drawLine(start, end)
-        painter.setBrush(color.lighter(125))
-        painter.setPen(QPen(color.darker(150), 2))
+        # 高光内线
+        painter.setPen(QPen(color.lighter(140), 6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        for start, end in zip(points, points[1:]):
+            painter.drawLine(start, end)
+        # 关节圆点
+        painter.setBrush(color.lighter(130))
+        painter.setPen(QPen(color.darker(145), 2))
         for point in points:
             painter.drawEllipse(point, 7, 7)
-        painter.setPen(color.darker(170))
-        painter.drawText(points[-1] + QPointF(-16, -8), name)
+        # 指尖高亮
+        painter.setBrush(QColor("#ffffff"))
+        painter.setPen(QPen(color.darker(130), 2))
+        painter.drawEllipse(points[-1], 5, 5)
+        # 标签
+        painter.setPen(color.darker(160))
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(max(9, font.pointSize() - 1))
+        painter.setFont(font)
+        painter.drawText(points[-1] + QPointF(-16, -10), name)
+        font.setBold(False)
+        painter.setFont(font)
 
 
 def math_cos(value: float) -> float:
-    import math
-
     return math.cos(value)
 
 
 def math_sin(value: float) -> float:
-    import math
-
     return math.sin(value)
 
 
@@ -1177,7 +1479,68 @@ class UrdfTwinPanel(QFrame):
 """
 
 
-class MacroDialog(QDialog):
+class _MacroQueueMixin:
+    """MacroDialog / MacroPanel 共享的宏队列管理逻辑。"""
+
+    _macro: MacroService
+    _queue: QListWidget
+    _action_list: QListWidget
+    _repeat: QSpinBox
+
+    def _add_selected(self) -> None:
+        item = self._action_list.currentItem()
+        if item is None:
+            return
+        action_name, kind, title = item.data(Qt.ItemDataRole.UserRole)
+        self._macro.add_step(
+            MacroStep(
+                action_name=action_name,
+                action_type="preset" if kind == "预设" else "trajectory",
+                label=title,
+                repeat=self._repeat.value(),
+            )
+        )
+        self._refresh_queue()
+
+    def _selected_queue_index(self) -> int:
+        row = self._queue.currentRow()
+        return row if row >= 0 else -1
+
+    def _move_up(self) -> None:
+        row = self._selected_queue_index()
+        if row < 0:
+            return
+        self._macro.move_up(row)
+        self._refresh_queue(max(0, row - 1))
+
+    def _move_down(self) -> None:
+        row = self._selected_queue_index()
+        if row < 0:
+            return
+        self._macro.move_down(row)
+        self._refresh_queue(min(len(self._macro.steps) - 1, row + 1))
+
+    def _remove(self) -> None:
+        row = self._selected_queue_index()
+        if row < 0:
+            return
+        self._macro.remove_step(row)
+        self._refresh_queue(min(len(self._macro.steps) - 1, row))
+
+    def _clear(self) -> None:
+        self._macro.clear()
+        self._refresh_queue()
+
+    def _refresh_queue(self, select_row: int | None = None) -> None:
+        self._queue.clear()
+        for step in self._macro.steps:
+            kind = "预设" if step.action_type == "preset" else "轨迹"
+            self._queue.addItem(f"{kind} · {step.label} x {step.repeat}")
+        if select_row is not None and select_row >= 0:
+            self._queue.setCurrentRow(select_row)
+
+
+class MacroDialog(_MacroQueueMixin, QDialog):
     def __init__(
         self,
         parent: QWidget,
@@ -1244,60 +1607,7 @@ class MacroDialog(QDialog):
         bottom.addWidget(close_btn)
         layout.addLayout(bottom)
 
-    def _add_selected(self) -> None:
-        item = self._action_list.currentItem()
-        if item is None:
-            return
-        action_name, kind, title = item.data(Qt.ItemDataRole.UserRole)
-        self._macro.add_step(
-            MacroStep(
-                action_name=action_name,
-                action_type="preset" if kind == "预设" else "trajectory",
-                label=title,
-                repeat=self._repeat.value(),
-            )
-        )
-        self._refresh_queue()
-
-    def _selected_queue_index(self) -> int:
-        row = self._queue.currentRow()
-        return row if row >= 0 else -1
-
-    def _move_up(self) -> None:
-        row = self._selected_queue_index()
-        if row < 0:
-            return
-        self._macro.move_up(row)
-        self._refresh_queue(max(0, row - 1))
-
-    def _move_down(self) -> None:
-        row = self._selected_queue_index()
-        if row < 0:
-            return
-        self._macro.move_down(row)
-        self._refresh_queue(min(len(self._macro.steps) - 1, row + 1))
-
-    def _remove(self) -> None:
-        row = self._selected_queue_index()
-        if row < 0:
-            return
-        self._macro.remove_step(row)
-        self._refresh_queue(min(len(self._macro.steps) - 1, row))
-
-    def _clear(self) -> None:
-        self._macro.clear()
-        self._refresh_queue()
-
-    def _refresh_queue(self, select_row: int | None = None) -> None:
-        self._queue.clear()
-        for step in self._macro.steps:
-            kind = "预设" if step.action_type == "preset" else "轨迹"
-            self._queue.addItem(f"{kind} · {step.label} x {step.repeat}")
-        if select_row is not None and select_row >= 0:
-            self._queue.setCurrentRow(select_row)
-
-
-class MacroPanel(QFrame):
+class MacroPanel(_MacroQueueMixin, QFrame):
     def __init__(
         self,
         execute_callback: Callable[[MacroService], None],
@@ -1367,59 +1677,6 @@ class MacroPanel(QFrame):
 
     def set_enabled(self, enabled: bool) -> None:
         self.setEnabled(enabled)
-
-    def _add_selected(self) -> None:
-        item = self._action_list.currentItem()
-        if item is None:
-            return
-        action_name, kind, title = item.data(Qt.ItemDataRole.UserRole)
-        self._macro.add_step(
-            MacroStep(
-                action_name=action_name,
-                action_type="preset" if kind == "预设" else "trajectory",
-                label=title,
-                repeat=self._repeat.value(),
-            )
-        )
-        self._refresh_queue()
-
-    def _selected_queue_index(self) -> int:
-        row = self._queue.currentRow()
-        return row if row >= 0 else -1
-
-    def _move_up(self) -> None:
-        row = self._selected_queue_index()
-        if row < 0:
-            return
-        self._macro.move_up(row)
-        self._refresh_queue(max(0, row - 1))
-
-    def _move_down(self) -> None:
-        row = self._selected_queue_index()
-        if row < 0:
-            return
-        self._macro.move_down(row)
-        self._refresh_queue(min(len(self._macro.steps) - 1, row + 1))
-
-    def _remove(self) -> None:
-        row = self._selected_queue_index()
-        if row < 0:
-            return
-        self._macro.remove_step(row)
-        self._refresh_queue(min(len(self._macro.steps) - 1, row))
-
-    def _clear(self) -> None:
-        self._macro.clear()
-        self._refresh_queue()
-
-    def _refresh_queue(self, select_row: int | None = None) -> None:
-        self._queue.clear()
-        for step in self._macro.steps:
-            kind = "预设" if step.action_type == "preset" else "轨迹"
-            self._queue.addItem(f"{kind} · {step.label} x {step.repeat}")
-        if select_row is not None and select_row >= 0:
-            self._queue.setCurrentRow(select_row)
-
 
 class SettingsDialog(QDialog):
     def __init__(self, parent: QWidget, config: AppConfig) -> None:
@@ -1629,17 +1886,24 @@ class RPSPanel(QFrame):
         head.addWidget(self._start_btn)
         layout.addLayout(head)
 
-        self._image = QLabel("<center><span style='color:#6b7280'>摄像头未启动</span></center>")
+        self._image = QLabel("<center><span style='color:#6b7280;font-size:14px'>摄像头未启动<br><small>先启动摄像头再开始猜拳</small></span></center>")
         self._image.setMinimumHeight(250)
         self._image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image.setStyleSheet("background: #101820; border: 1px solid #2b3a48; border-radius: 8px; color: #d1d5db;")
+        self._image.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #0f172a, stop:1 #1e293b); "
+            "border: 1px solid #334155; border-radius: 10px; color: #94a3b8;"
+        )
         layout.addWidget(self._image, 1)
         self._detected = QLabel("检测到手势：--")
         self._detected.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._detected)
         self._result = QLabel("做出石头 / 布 / 剪刀，O20 会出克制动作")
         self._result.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._result.setStyleSheet("background: transparent; font-size: 16px; font-weight: 700;")
+        self._result.setStyleSheet(
+            "background: transparent; font-size: 15px; font-weight: 700; "
+            "color: #334155; padding: 6px 0;"
+        )
         layout.addWidget(self._result)
 
     def set_mirror(self, mirror: bool) -> None:
@@ -1666,7 +1930,7 @@ class RPSPanel(QFrame):
     def on_camera_stopped(self) -> None:
         self._latest_frame_detection = None
         self._image.clear()
-        self._image.setText("<center><span style='color:#6b7280'>摄像头未启动</span></center>")
+        self._image.setText("<center><span style='color:#6b7280;font-size:14px'>摄像头未启动<br><small>点击上方按钮开启</small></span></center>")
         self._detected.setText("检测到手势：--")
         self._stop_game()
 
@@ -1746,7 +2010,7 @@ class MainWindow(QMainWindow):
         self._runtime_root = self._config_path.parent
         self._log_path = self._runtime_root / "logs" / f"console-{datetime.now():%Y%m%d}.log"
 
-        self.setWindowTitle(self._config.ui.window_title)
+        self.setWindowTitle(f"{self._config.ui.window_title} v0.2.0")
         self.resize(self._config.ui.window_width, self._config.ui.window_height)
         self.setStyleSheet(APP_STYLE)
         self._build_ui()
@@ -1803,20 +2067,31 @@ class MainWindow(QMainWindow):
         self._control_badge = QLabel("控制源：空闲")
         self._control_badge.setObjectName("BadgeMuted")
         self._control_badge.setToolTip("当前没有持续发送源，滑块可编辑目标姿态")
+        # 连接参数组
         for widget in [
             QLabel("连接方式"), self._backend_combo,
             QLabel("手型"), self._side_combo,
             QLabel("设备"), self._device_spin,
             QLabel("速度"), self._speed_spin,
-            self._connect_btn,
+        ]:
+            toolbar_layout.addWidget(widget)
+        toolbar_layout.addWidget(self._connect_btn)
+        toolbar_layout.addWidget(_toolbar_separator())
+        # 功能组
+        for widget in [
             self._settings_btn,
             self._import_demo_btn,
             self._macro_btn,
-            self._read_btn,
-            self._scan_btn,
-            self._stop_btn,
         ]:
             toolbar_layout.addWidget(widget)
+        toolbar_layout.addWidget(_toolbar_separator())
+        # 诊断组
+        for widget in [
+            self._read_btn,
+            self._scan_btn,
+        ]:
+            toolbar_layout.addWidget(widget)
+        toolbar_layout.addWidget(self._stop_btn)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._control_badge)
         toolbar_layout.addWidget(self._backend_status)
@@ -1876,6 +2151,15 @@ class MainWindow(QMainWindow):
         scan_action.triggered.connect(self._scan_environment)
         self.menuBar().addAction(scan_action)
 
+        # 底部状态栏
+        from xbotics_o20 import __version__
+        status_bar = self.statusBar()
+        status_bar.setStyleSheet(
+            "QStatusBar { background: #f8fafc; border-top: 1px solid #e2e8f0; "
+            "color: #64748b; font-size: 12px; padding: 2px 8px; }"
+        )
+        status_bar.showMessage(f"Xbotics O20 控制台 v{__version__}  |  就绪")
+
     def _build_twin_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -1896,10 +2180,15 @@ class MainWindow(QMainWindow):
         return tab
 
     def _build_log_panel(self) -> QWidget:
-        panel, layout = _card("日志")
+        panel, layout = _card("运行日志")
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setMinimumHeight(180)
+        self._log.setStyleSheet(
+            "QTextEdit { font-family: 'Cascadia Code', 'Consolas', 'Microsoft YaHei UI', monospace; "
+            "font-size: 12px; background: #fafcfe; color: #334155; "
+            "border: 1px solid #e8edf3; border-radius: 6px; padding: 8px; }"
+        )
         layout.addWidget(self._log, 1)
         return panel
 
@@ -2929,6 +3218,9 @@ class MainWindow(QMainWindow):
         entry = "\n".join(f"[{stamp}] {line}" for line in lines)
         if hasattr(self, "_log"):
             self._log.append(entry)
+        # 同步到状态栏（只显示最新一行）
+        if hasattr(self, "statusBar"):
+            self.statusBar().showMessage(f"[{stamp}] {lines[-1]}")
         try:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as file:
